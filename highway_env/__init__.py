@@ -41,6 +41,12 @@ def _register_highway_envs():
         entry_point="highway_env.envs.highway_env:HighwayEnvFast",
     )
 
+    # crash_env.py
+    register(
+        id='crash-v0',
+        entry_point='highway_env.envs:CrashEnv',
+    )
+
     # intersection_env.py
     register(
         id="intersection-v0",
