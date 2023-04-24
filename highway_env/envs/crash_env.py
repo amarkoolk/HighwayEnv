@@ -37,14 +37,12 @@ class CrashEnv(AbstractEnv):
             "initial_lane_id": None,
             "duration": 40,  # [s]
             "ego_spacing": 2,
+            "npc_spacing": 1,
+            "ego_speed_range" : [-40, 80],
+            "npc_speed_range" : [-40, 80],
             "vehicles_density": 1,
-            "collision_reward": -1,    # The reward received when colliding with a vehicle.
-            "right_lane_reward": 0.0,  # The reward received when driving on the right-most lanes, linearly mapped to
-                                       # zero for other lanes.
-            "high_speed_reward": 0.0,  # The reward received when driving at full speed, linearly mapped to zero for
-                                       # lower speeds according to config["reward_speed_range"].
-            "lane_change_reward": 0,   # The reward received at each lane change action.
-            "reward_speed_range": [20, 30],
+            "collision_reward": 1,    # The reward received when colliding with a vehicle.
+            "ttc_reward": [0,1],  # The reward range for time to collision with the ego vehicle.
             "normalize_reward": True,
             "offroad_terminal": False
         })
@@ -70,14 +68,18 @@ class CrashEnv(AbstractEnv):
                 self.road,
                 speed=25,
                 lane_id=self.config["initial_lane_id"],
-                spacing=self.config["ego_spacing"]
+                spacing=self.config["ego_spacing"],
+                speed_range = self.config["npc_speed_range"]
             )
-            vehicle = self.action_type.vehicle_class(self.road, vehicle.position, vehicle.heading, vehicle.speed)
+            vehicle = self.action_type.vehicle_class(road = self.road, \
+                position = vehicle.position, \
+                heading = vehicle.heading, \
+                speed = vehicle.speed)
             self.controlled_vehicles.append(vehicle)
             self.road.vehicles.append(vehicle)
 
             for _ in range(others):
-                vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"])
+                vehicle = other_vehicles_type.create_random(self.road, spacing=1, speed_range = self.config["npc_speed_range"])
                 vehicle.randomize_behavior()
                 self.road.vehicles.append(vehicle)
 
@@ -89,12 +91,6 @@ class CrashEnv(AbstractEnv):
         """
         rewards = self._rewards(action)
         reward = sum(self.config.get(name, 0) * reward for name, reward in rewards.items())
-        if self.config["normalize_reward"]:
-            reward = utils.lmap(reward,
-                                [self.config["collision_reward"],
-                                 self.config["high_speed_reward"] + self.config["right_lane_reward"]],
-                                [0, 1])
-        reward *= rewards['on_road_reward']
         return reward
 
     def _rewards(self, action: Action) -> Dict[Text, float]:
@@ -102,13 +98,22 @@ class CrashEnv(AbstractEnv):
         lane = self.vehicle.target_lane_index[2] if isinstance(self.vehicle, ControlledVehicle) \
             else self.vehicle.lane_index[2]
         # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
-        forward_speed = self.vehicle.speed * np.cos(self.vehicle.heading)
-        scaled_speed = utils.lmap(forward_speed, self.config["reward_speed_range"], [0, 1])
+        dx = self.road.vehicles[0].position[0] - self.road.vehicles[1].position[0]
+        dy = self.road.vehicles[1].position[1] - self.road.vehicles[1].position[1]
+        vx0 = (np.cos(self.road.vehicles[0].heading))*self.road.vehicles[0].speed
+        vx1 = (np.cos(self.road.vehicles[1].heading))*self.road.vehicles[1].speed
+        vy0 = (np.sin(self.road.vehicles[0].heading))*self.road.vehicles[0].speed
+        vy1 = (np.sin(self.road.vehicles[1].heading))*self.road.vehicles[1].speed
+        ttc_x = np.abs(dx)/np.abs(vx0 - vx1)
+        ttc_y = np.abs(dy)/np.abs(vy0 - vy1)
+        r_x = -1.0/(1.0 + np.exp(4-ttc_x)) + 1.0
+        r_y = -1.0/(1.0 + np.exp(4-ttc_y)) + 1.0
+        print('{} {} {} {}'.format(vx0, vx1, vy0, vy1))
+        print('ttcx:{} ttcy:{} rx:{} ry:{}'.format(ttc_x, ttc_y, r_x, r_y))
+        # print(bool(self.vehicle.crashed))
+
         return {
-            "collision_reward": float(self.vehicle.crashed),
-            "right_lane_reward": lane / max(len(neighbours) - 1, 1),
-            "high_speed_reward": np.clip(scaled_speed, 0, 1),
-            "on_road_reward": float(self.vehicle.on_road)
+            "collision_reward": float(self.vehicle.crashed)
         }
 
     def _is_terminated(self) -> bool:

@@ -51,7 +51,8 @@ class Vehicle(RoadObject):
                       lane_from: Optional[str] = None,
                       lane_to: Optional[str] = None,
                       lane_id: Optional[int] = None,
-                      spacing: float = 1) \
+                      spacing: float = 1,
+                      speed_range: Tuple[float, float] = (-40, 40),) \
             -> "Vehicle":
         """
         Create a random vehicle on the road.
@@ -67,6 +68,8 @@ class Vehicle(RoadObject):
         :param spacing: ratio of spacing to the front vehicle, 1 being the default
         :return: A vehicle with random position and/or speed
         """
+
+        MIN_SPEED, MAX_SPEED = speed_range
         _from = lane_from or road.np_random.choice(list(road.network.graph.keys()))
         _to = lane_to or road.np_random.choice(list(road.network.graph[_from].keys()))
         _id = lane_id if lane_id is not None else road.np_random.choice(len(road.network.graph[_from][_to]))
