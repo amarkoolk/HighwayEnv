@@ -45,7 +45,8 @@ class CrashEnv(AbstractEnv):
             "ttc_y_reward": 1,  # The reward range for time to collision in the y direction with the ego vehicle.
             "normalize_reward": False,
             "offroad_terminal": False,
-            "tolerance" : 1e-3
+            "tolerance" : 1e-3,
+            "spawn_configs" : ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center']
         })
         return config
 
@@ -62,7 +63,7 @@ class CrashEnv(AbstractEnv):
         """Create some new random vehicles of a given type, and add them on the road."""
         other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
 
-        spawn_configs = ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center']
+        spawn_configs = self.config["spawn_configs"]
         self.spawn_config = self.np_random.choice(spawn_configs)
         spawn_distance = self.np_random.normal(self.config["mean_distance"], self.config["mean_distance"]/10)
         starting_vel_offset = self.np_random.normal(self.config["mean_delta_v"], 5)
@@ -247,15 +248,6 @@ class CrashEnv(AbstractEnv):
         else:
             ttc_y = dy/dvy
             r_y = 1.0/(1.0 + np.exp(-4-ttc_y)) if ttc_y <= 0 else -1.0/(1.0 + np.exp(4-ttc_y))
-            
-
-        # print(float(self.vehicle.crashed))
-        # print('CR: {}, R_X: {}, R_Y: {}'.format(float(self.vehicle.crashed), r_x, r_y))
-
-        # print("DX: {}, DY: {}, DVX: {}, DVY: {}, Collision: {}".format(dx, dy, dvx, dvy, bool(self.vehicle.crashed)))
-        # if bool(self.vehicle.crashed):
-        #     print("DX: {}, DY: {}, DVX: {}, DVY: {}".format(dx, dy, dvx, dvy))
-
 
         return {
             "collision_reward": float(self.vehicle.crashed),
