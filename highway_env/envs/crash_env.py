@@ -1,4 +1,4 @@
-from typing import Dict, Text
+from typing import Dict, Text, Optional
 
 import numpy as np
 
@@ -21,6 +21,7 @@ class CrashEnv(AbstractEnv):
     staying on the rightmost lanes and avoiding collisions.
     """
 
+
     @classmethod
     def default_config(cls) -> dict:
         config = super().default_config()
@@ -40,7 +41,7 @@ class CrashEnv(AbstractEnv):
             "mean_distance": 20,
             "mean_delta_v": 0,
             "vehicles_density": 1,
-            "collision_reward": 1,    # The reward received when colli ding with a vehicle.
+            "collision_reward": 1,    # The reward received when colliding with a vehicle.
             "ttc_x_reward": 1,  # The reward range for time to collision in the x direction with the ego vehicle.
             "ttc_y_reward": 1,  # The reward range for time to collision in the y direction with the ego vehicle.
             "normalize_reward": False,
@@ -51,6 +52,8 @@ class CrashEnv(AbstractEnv):
         return config
 
     def _reset(self) -> None:
+        self.ttc_x = 0
+        self.ttc_y = 0
         self._create_road()
         self._create_vehicles()
 
@@ -186,8 +189,8 @@ class CrashEnv(AbstractEnv):
             elif self.spawn_config == 'forward_center':
                 lane1 = self.np_random.choice(self.road.network.graph['0']['1'])
                 vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                        position = lane1.position(20, 0), \
-                                                        heading = lane1.heading_at(20), \
+                                                        position = lane1.position(spawn_distance, 0), \
+                                                        heading = lane1.heading_at(spawn_distance), \
                                                         speed = self.config["initial_speed"]+starting_vel_offset)
                 
                 self.controlled_vehicles.append(vehicle)
@@ -218,8 +221,8 @@ class CrashEnv(AbstractEnv):
             else self.vehicle.lane_index[2]
         # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
         
-        dx = self.road.vehicles[1].position[0] - self.road.vehicles[0].position[0] - self.road.vehicles[1].LENGTH/2
-        dy = self.road.vehicles[1].position[1] - self.road.vehicles[0].position[1] - self.road.vehicles[1].WIDTH/2
+        dx = self.road.vehicles[1].position[0] - self.road.vehicles[0].position[0]
+        dy = self.road.vehicles[1].position[1] - self.road.vehicles[0].position[1]
         vx0 = (np.cos(self.road.vehicles[0].heading))*self.road.vehicles[0].speed
         vx1 = (np.cos(self.road.vehicles[1].heading))*self.road.vehicles[1].speed
         vy0 = (np.sin(self.road.vehicles[0].heading))*self.road.vehicles[0].speed
@@ -228,32 +231,53 @@ class CrashEnv(AbstractEnv):
         dvx = vx1 - vx0
         dvy = vy1 - vy0
 
+        self.ttc_x = dx/dvx
+        self.ttc_y = dy/dvy
 
 
         # Calculate Rewards
-        if dvx == 0:
-            if dx == 0:
+        if abs(dvx) < self.config["tolerance"]:
+            if abs(dx) < self.config["tolerance"]:
                 r_x = self.config['ttc_x_reward']
             else:
                 r_x = 0
         else:
-            ttc_x = dx/dvx
-            r_x = 1.0/(1.0 + np.exp(-4-ttc_x)) if ttc_x <= 0 else -1.0/(1.0 + np.exp(4-ttc_x))
+            r_x = 1.0/(1.0 + np.exp(-4-0.1*self.ttc_x)) if self.ttc_x <= 0 else -1.0/(1.0 + np.exp(4-0.1*self.ttc_x))
         
-        if dvy == 0:
-            if dy == 0:
+        if abs(dvy) < self.config["tolerance"]:
+            if abs(dy) < self.config["tolerance"]:
                 r_y = self.config['ttc_y_reward']
             else:
                 r_y = 0
         else:
-            ttc_y = dy/dvy
-            r_y = 1.0/(1.0 + np.exp(-4-ttc_y)) if ttc_y <= 0 else -1.0/(1.0 + np.exp(4-ttc_y))
-
+            r_y = 1.0/(1.0 + np.exp(-4-0.1*self.ttc_y)) if self.ttc_y <= 0 else -1.0/(1.0 + np.exp(4-0.1*self.ttc_y))
+        
         return {
             "collision_reward": float(self.vehicle.crashed),
             "ttc_x_reward": r_x,
             "ttc_y_reward": r_y
         }
+    
+    def _info(self, obs: Observation, action: Optional[Action] = None) -> dict:
+        """
+        Return a dictionary of additional information
+
+        :param obs: current observation
+        :param action: current action
+        :return: info dict
+        """
+        info = {
+            "speed": self.vehicle.speed,
+            "crashed": self.vehicle.crashed,
+            "action": action,
+            "ttc_x": self.ttc_x,
+            "ttc_y": self.ttc_y
+        }
+        try:
+            info["rewards"] = self._rewards(action)
+        except NotImplementedError:
+            pass
+        return info
 
     def _is_terminated(self) -> bool:
         """The episode is over if the ego vehicle crashed."""
