@@ -267,6 +267,7 @@ class CrashEnv(AbstractEnv):
         :return: info dict
         """
         info = {
+            "spawn_config": self.spawn_config,
             "speed": self.vehicle.speed,
             "crashed": self.vehicle.crashed,
             "action": action,
