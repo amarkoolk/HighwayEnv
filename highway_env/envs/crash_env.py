@@ -52,6 +52,10 @@ class CrashEnv(AbstractEnv):
         return config
 
     def _reset(self) -> None:
+        self.dx = 0
+        self.dy = 0
+        self.dvx = 0
+        self.dvy = 0
         self.ttc_x = 0
         self.ttc_y = 0
         self._create_road()
@@ -221,31 +225,31 @@ class CrashEnv(AbstractEnv):
             else self.vehicle.lane_index[2]
         # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
         
-        dx = self.road.vehicles[1].position[0] - self.road.vehicles[0].position[0]
-        dy = self.road.vehicles[1].position[1] - self.road.vehicles[0].position[1]
+        self.dx = self.road.vehicles[1].position[0] - self.road.vehicles[0].position[0]
+        self.dy = self.road.vehicles[1].position[1] - self.road.vehicles[0].position[1]
         vx0 = (np.cos(self.road.vehicles[0].heading))*self.road.vehicles[0].speed
         vx1 = (np.cos(self.road.vehicles[1].heading))*self.road.vehicles[1].speed
         vy0 = (np.sin(self.road.vehicles[0].heading))*self.road.vehicles[0].speed
         vy1 = (np.sin(self.road.vehicles[1].heading))*self.road.vehicles[1].speed
 
-        dvx = vx1 - vx0
-        dvy = vy1 - vy0
+        self.dvx = vx1 - vx0
+        self.dvy = vy1 - vy0
 
-        self.ttc_x = dx/dvx
-        self.ttc_y = dy/dvy
+        self.ttc_x = self.dx/self.dvx
+        self.ttc_y = self.dy/self.dvy
 
 
         # Calculate Rewards
-        if abs(dvx) < self.config["tolerance"]:
-            if abs(dx) < self.config["tolerance"]:
+        if abs(self.dvx) < self.config["tolerance"]:
+            if abs(self.dx) < self.config["tolerance"]:
                 r_x = self.config['ttc_x_reward']
             else:
                 r_x = 0
         else:
             r_x = 1.0/(1.0 + np.exp(-4-0.1*self.ttc_x)) if self.ttc_x <= 0 else -1.0/(1.0 + np.exp(4-0.1*self.ttc_x))
         
-        if abs(dvy) < self.config["tolerance"]:
-            if abs(dy) < self.config["tolerance"]:
+        if abs(self.dvy) < self.config["tolerance"]:
+            if abs(self.dy) < self.config["tolerance"]:
                 r_y = self.config['ttc_y_reward']
             else:
                 r_y = 0
@@ -272,7 +276,11 @@ class CrashEnv(AbstractEnv):
             "crashed": self.vehicle.crashed,
             "action": action,
             "ttc_x": self.ttc_x,
-            "ttc_y": self.ttc_y
+            "ttc_y": self.ttc_y,
+            'dx': self.dx,
+            'dy': self.dy,
+            'dvx': self.dvx,
+            'dvy': self.dvy
         }
         try:
             info["rewards"] = self._rewards(action)
