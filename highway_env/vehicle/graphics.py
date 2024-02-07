@@ -100,9 +100,10 @@ class VehicleGraphics(object):
         cls.blit_rotate(surface, vehicle_surface, position, np.rad2deg(-h))
 
         # Label
+        label = True
         if label:
             font = pygame.font.Font(None, 15)
-            text = "#{}".format(id(v) % 1000)
+            text = "{:.1f}".format(v.speed)
             text = font.render(text, 1, (10, 10, 10), (255, 255, 255))
             surface.blit(text, position)
 
@@ -135,7 +136,7 @@ class VehicleGraphics(object):
             pygame.draw.rect(surf, (255, 0, 0), (*origin, *rotated_image.get_size()), 2)
 
     @classmethod
-    def display_trajectory(cls, states: List[Vehicle], surface: "WorldSurface", offscreen: bool = False) -> None:
+    def display_trajectory(cls, states: List[Vehicle], surface: "WorldSurface", offscreen: bool = False, label = False) -> None:
         """
         Display the whole trajectory of a vehicle on a pygame surface.
 
@@ -144,7 +145,7 @@ class VehicleGraphics(object):
         :param offscreen: whether the rendering should be done offscreen or not
         """
         for vehicle in states:
-            cls.display(vehicle, surface, transparent=True, offscreen=offscreen)
+            cls.display(vehicle, surface, transparent=True, offscreen=offscreen, label = label)
 
     @classmethod
     def display_history(cls, vehicle: Vehicle, surface: "WorldSurface", frequency: float = 3, duration: float = 2,
@@ -177,7 +178,10 @@ class VehicleGraphics(object):
         elif isinstance(vehicle, IDMVehicle):
             color = cls.BLUE
         elif isinstance(vehicle, MDPVehicle):
-            color = cls.EGO_COLOR
+            if vehicle.color:
+                color = vehicle.color
+            else:
+                color = cls.EGO_COLOR
         if transparent:
             color = (color[0], color[1], color[2], 30)
         return color
