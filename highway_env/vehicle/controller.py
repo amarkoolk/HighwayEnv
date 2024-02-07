@@ -258,17 +258,16 @@ class MDPVehicle(ControlledVehicle):
 
     DEFAULT_TARGET_SPEEDS = np.linspace(20, 30, 3)
 
-    def __init__(
-        self,
-        road: Road,
-        position: List[float],
-        heading: float = 0,
-        speed: float = 0,
-        target_lane_index: Optional[LaneIndex] = None,
-        target_speed: Optional[float] = None,
-        target_speeds: Optional[Vector] = None,
-        route: Optional[Route] = None,
-    ) -> None:
+    def __init__(self,
+                 road: Road,
+                 position: List[float],
+                 heading: float = 0,
+                 speed: float = 0,
+                 target_lane_index: Optional[LaneIndex] = None,
+                 target_speed: Optional[float] = None,
+                 target_speeds: Optional[Vector] = None,
+                 route: Optional[Route] = None,
+                 color: tuple = None) -> None:
         """
         Initializes an MDPVehicle
 
@@ -291,6 +290,7 @@ class MDPVehicle(ControlledVehicle):
         )
         self.speed_index = self.speed_to_index(self.target_speed)
         self.target_speed = self.index_to_speed(self.speed_index)
+        self.color = color
 
     def act(self, action: Union[dict, str] = None) -> None:
         """

@@ -45,23 +45,21 @@ class IDMVehicle(ControlledVehicle):
     LANE_CHANGE_MAX_BRAKING_IMPOSED = 2.0  # [m/s2]
     LANE_CHANGE_DELAY = 1.0  # [s]
 
-    def __init__(
-        self,
-        road: Road,
-        position: Vector,
-        heading: float = 0,
-        speed: float = 0,
-        target_lane_index: int = None,
-        target_speed: float = None,
-        route: Route = None,
-        enable_lane_change: bool = True,
-        timer: float = None,
-    ):
-        super().__init__(
-            road, position, heading, speed, target_lane_index, target_speed, route
-        )
+    def __init__(self,
+                 road: Road,
+                 position: Vector,
+                 heading: float = 0,
+                 speed: float = 0,
+                 target_lane_index: int = None,
+                 target_speed: float = None,
+                 route: Route = None,
+                 enable_lane_change: bool = True,
+                 timer: float = None,
+                 color: tuple = None):
+        super().__init__(road, position, heading, speed, target_lane_index, target_speed, route)
         self.enable_lane_change = enable_lane_change
-        self.timer = timer or (np.sum(self.position) * np.pi) % self.LANE_CHANGE_DELAY
+        self.timer = timer or (np.sum(self.position)*np.pi) % self.LANE_CHANGE_DELAY
+        self.color = color
 
     def randomize_behavior(self):
         self.DELTA = self.road.np_random.uniform(

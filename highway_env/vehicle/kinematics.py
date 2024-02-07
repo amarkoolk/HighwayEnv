@@ -31,14 +31,13 @@ class Vehicle(RoadObject):
     HISTORY_SIZE = 30
     """ Length of the vehicle state history, for trajectory display"""
 
-    def __init__(
-        self,
-        road: Road,
-        position: Vector,
-        heading: float = 0,
-        speed: float = 0,
-        predition_type: str = "constant_steering",
-    ):
+    def __init__(self,
+                 road: Road,
+                 position: Vector,
+                 heading: float = 0,
+                 speed: float = 0,
+                 predition_type: str = 'constant_steering',
+                 color: tuple = None):
         super().__init__(road, position, heading, speed)
         self.prediction_type = predition_type
         self.action = {"steering": 0, "acceleration": 0}
@@ -46,6 +45,7 @@ class Vehicle(RoadObject):
         self.impact = None
         self.log = []
         self.history = deque(maxlen=self.HISTORY_SIZE)
+        self.color = color
 
     @classmethod
     def create_random(

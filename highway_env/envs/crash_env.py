@@ -93,291 +93,91 @@ class CrashEnv(AbstractEnv):
                 vehicle.randomize_behavior()
                 self.road.vehicles.append(vehicle)
 
-    def dual_controlled_vehicle_spawn(self):
+    def create_vehicle(self, vehicle_class, lane, spawn_distance, starting_vel_offset, color = None):
+        vehicle = vehicle_class(
+            road=self.road,
+            position=lane.position(spawn_distance, 0),
+            heading=lane.heading_at(spawn_distance),
+            speed=self.config["initial_speed"] + starting_vel_offset,
+            color = color
+        )
+        self.road.vehicles.append(vehicle)
+        try:
+            if vehicle_class.func == self.action_type.vehicle_class.func:
+                self.controlled_vehicles.append(vehicle)
+        except AttributeError:
+            pass
 
+    def dual_controlled_vehicle_spawn(self):
         spawn_configs = self.config["spawn_configs"]
         self.spawn_config = self.np_random.choice(spawn_configs)
-        spawn_distance = self.np_random.normal(self.config["mean_distance"], self.config["mean_distance"]/10)
+        spawn_distance = self.np_random.normal(self.config["mean_distance"], self.config["mean_distance"] / 10)
         starting_vel_offset = self.np_random.normal(self.config["mean_delta_v"], 5)
         self.controlled_vehicles = []
-        # Behind Left
-        if self.spawn_config == 'behind_left':
-            lane1 = self.road.network.graph['0']['1'][0]
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                    position = lane1.position(0, 0), \
-                                                    heading = lane1.heading_at(0), \
-                                                    speed = self.config["initial_speed"]+starting_vel_offset)
-            
-            self.controlled_vehicles.append(vehicle)
-            self.road.vehicles.append(vehicle)
 
-            lane2 = self.road.network.graph['0']['1'][1]
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                        position = lane2.position(spawn_distance, 0), \
-                                        heading = lane2.heading_at(spawn_distance), \
-                                        speed = self.config["initial_speed"]+starting_vel_offset)
+        lanes = self.road.network.graph['0']['1']
+        lane_configurations = {
+            'behind_left': [0, 1],
+            'behind_right': [1, 0],
+            'behind_center': 'random',
+            'adjacent_left': [0, 1],
+            'adjacent_right': [1, 0],
+            'forward_left': [0, 1],
+            'forward_right': [1, 0],
+            'forward_center': 'random'
+        }
 
-            self.road.vehicles.append(vehicle)
-            self.controlled_vehicles.append(vehicle)
-        elif self.spawn_config == 'behind_right':
-            lane1 = self.road.network.graph['0']['1'][1]
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                    position = lane1.position(0, 0), \
-                                                    heading = lane1.heading_at(0), \
-                                                    speed = self.config["initial_speed"]+starting_vel_offset)
-            
-            self.controlled_vehicles.append(vehicle)
-            self.road.vehicles.append(vehicle)
+        lane_indices = lane_configurations[self.spawn_config]
+        if lane_indices == 'random':
+            lane1 = self.np_random.choice(lanes)
+            lane2 = lane1  # For the center configurations, both vehicles are in the same lane
+        else:
+            lane1, lane2 = [lanes[idx] for idx in lane_indices]
 
-            lane2 = self.road.network.graph['0']['1'][0]
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                        position = lane2.position(spawn_distance, 0), \
-                                        heading = lane2.heading_at(spawn_distance), \
-                                        speed = self.config["initial_speed"]+starting_vel_offset)
-            self.road.vehicles.append(vehicle)
-            self.controlled_vehicles.append(vehicle)
-        elif self.spawn_config == 'behind_center':
-            lane1 = self.np_random.choice(self.road.network.graph['0']['1'])
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                    position = lane1.position(0, 0), \
-                                                    heading = lane1.heading_at(0), \
-                                                    speed = self.config["initial_speed"]+starting_vel_offset)
-            
-            self.controlled_vehicles.append(vehicle)
-            self.road.vehicles.append(vehicle)
+        spawn_distance1 = 0 if self.spawn_config in ['behind_left', 'behind_right', 'adjacent_left', 'adjacent_right'] else spawn_distance
+        spawn_distance2 = spawn_distance if self.spawn_config in ['behind_left', 'behind_right'] else 0
 
-            lane2 = lane1
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                        position = lane2.position(spawn_distance, 0), \
-                                        heading = lane2.heading_at(spawn_distance), \
-                                        speed = self.config["initial_speed"]+starting_vel_offset)
-            self.road.vehicles.append(vehicle)
-            self.controlled_vehicles.append(vehicle)
-        elif self.spawn_config == 'adjacent_left':
-            lane1 = self.road.network.graph['0']['1'][0]
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                    position = lane1.position(0, 0), \
-                                                    heading = lane1.heading_at(0), \
-                                                    speed = self.config["initial_speed"]+starting_vel_offset)
-            
-            self.controlled_vehicles.append(vehicle)
-            self.road.vehicles.append(vehicle)
+        # Create Ego Vehicle
+        self.create_vehicle(self.action_type.vehicle_class, lane2, spawn_distance2, starting_vel_offset)
+        # Create NPC Vehicle
+        self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, starting_vel_offset, color = (100, 200, 255))
 
-            lane2 = self.road.network.graph['0']['1'][1]
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                        position = lane2.position(0, 0), \
-                                        heading = lane2.heading_at(0), \
-                                        speed = self.config["initial_speed"]+starting_vel_offset)
-            self.road.vehicles.append(vehicle)
-            self.controlled_vehicles.append(vehicle)
-        elif self.spawn_config == 'adjacent_right':
-            lane1 = self.road.network.graph['0']['1'][1]
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                    position = lane1.position(0, 0), \
-                                                    heading = lane1.heading_at(0), \
-                                                    speed = self.config["initial_speed"]+starting_vel_offset)
-            
-            self.controlled_vehicles.append(vehicle)
-            self.road.vehicles.append(vehicle)
-
-            lane2 = self.road.network.graph['0']['1'][0]
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                        position = lane2.position(0, 0), \
-                                        heading = lane2.heading_at(0), \
-                                        speed = self.config["initial_speed"]+starting_vel_offset)
-            self.road.vehicles.append(vehicle)
-            self.controlled_vehicles.append(vehicle)
-        elif self.spawn_config == 'forward_left':
-            lane1 = self.road.network.graph['0']['1'][0]
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                    position = lane1.position(spawn_distance, 0), \
-                                                    heading = lane1.heading_at(spawn_distance), \
-                                                    speed = self.config["initial_speed"]+starting_vel_offset)
-            
-            self.controlled_vehicles.append(vehicle)
-            self.road.vehicles.append(vehicle)
-
-            lane2 = self.road.network.graph['0']['1'][1]
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                        position = lane2.position(0, 0), \
-                                        heading = lane2.heading_at(0), \
-                                        speed = self.config["initial_speed"]+starting_vel_offset)
-            self.road.vehicles.append(vehicle)
-            self.controlled_vehicles.append(vehicle)
-        elif self.spawn_config == 'forward_right':
-            lane1 = self.road.network.graph['0']['1'][1]
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                    position = lane1.position(spawn_distance, 0), \
-                                                    heading = lane1.heading_at(spawn_distance), \
-                                                    speed = self.config["initial_speed"]+starting_vel_offset)
-            
-            self.controlled_vehicles.append(vehicle)
-            self.road.vehicles.append(vehicle)
-
-            lane2 = self.road.network.graph['0']['1'][0]
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                        position = lane2.position(0, 0), \
-                                        heading = lane2.heading_at(0), \
-                                        speed = self.config["initial_speed"]+starting_vel_offset)
-            self.road.vehicles.append(vehicle)
-            self.controlled_vehicles.append(vehicle)
-        elif self.spawn_config == 'forward_center':
-            lane1 = self.np_random.choice(self.road.network.graph['0']['1'])
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                    position = lane1.position(spawn_distance, 0), \
-                                                    heading = lane1.heading_at(spawn_distance), \
-                                                    speed = self.config["initial_speed"]+starting_vel_offset)
-            
-            self.controlled_vehicles.append(vehicle)
-            self.road.vehicles.append(vehicle)
-
-            lane2 = lane1
-            vehicle = self.action_type.vehicle_class(road = self.road, \
-                                        position = lane2.position(0, 0), \
-                                        heading = lane2.heading_at(0), \
-                                        speed = self.config["initial_speed"]+starting_vel_offset)
-            self.road.vehicles.append(vehicle)
-            self.controlled_vehicles.append(vehicle)
 
     def single_controlled_vehicle_spawn(self):
         other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
-
         spawn_configs = self.config["spawn_configs"]
         self.spawn_config = self.np_random.choice(spawn_configs)
-        spawn_distance = self.np_random.normal(self.config["mean_distance"], self.config["mean_distance"]/10)
+        spawn_distance = self.np_random.normal(self.config["mean_distance"], self.config["mean_distance"] / 10)
         starting_vel_offset = self.np_random.normal(self.config["mean_delta_v"], 5)
         self.controlled_vehicles = []
-        for _ in range(self.config["controlled_vehicles"]):
-            # Behind Left
-            if self.spawn_config == 'behind_left':
-                lane1 = self.road.network.graph['0']['1'][0]
-                vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                        position = lane1.position(0, 0), \
-                                                        heading = lane1.heading_at(0), \
-                                                        speed = self.config["initial_speed"]+starting_vel_offset)
-                
-                self.controlled_vehicles.append(vehicle)
-                self.road.vehicles.append(vehicle)
 
-                lane2 = self.road.network.graph['0']['1'][1]
-                vehicle = other_vehicles_type(road = self.road, \
-                                            position = lane2.position(spawn_distance, 0), \
-                                            heading = lane2.heading_at(spawn_distance), \
-                                            speed = self.config["initial_speed"]+starting_vel_offset)
+        lanes = self.road.network.graph['0']['1']
+        lane_configurations = {
+            'behind_left': [0, 1],
+            'behind_right': [1, 0],
+            'behind_center': 'random',
+            'adjacent_left': [0, 1],
+            'adjacent_right': [1, 0],
+            'forward_left': [0, 1],
+            'forward_right': [1, 0],
+            'forward_center': 'random',
+        }
 
-                self.road.vehicles.append(vehicle)
-            elif self.spawn_config == 'behind_right':
-                lane1 = self.road.network.graph['0']['1'][1]
-                vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                        position = lane1.position(0, 0), \
-                                                        heading = lane1.heading_at(0), \
-                                                        speed = self.config["initial_speed"]+starting_vel_offset)
-                
-                self.controlled_vehicles.append(vehicle)
-                self.road.vehicles.append(vehicle)
+        lane_indices = lane_configurations[self.spawn_config]
+        if lane_indices == 'random':
+            lane1 = self.np_random.choice(lanes)
+            lane2 = lane1  # For the center configurations, both vehicles are in the same lane
+        else:
+            lane1, lane2 = [lanes[idx] for idx in lane_indices]
 
-                lane2 = self.road.network.graph['0']['1'][0]
-                vehicle = other_vehicles_type(road = self.road, \
-                                            position = lane2.position(spawn_distance, 0), \
-                                            heading = lane2.heading_at(spawn_distance), \
-                                            speed = self.config["initial_speed"]+starting_vel_offset)
-                self.road.vehicles.append(vehicle)
-            elif self.spawn_config == 'behind_center':
-                lane1 = self.np_random.choice(self.road.network.graph['0']['1'])
-                vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                        position = lane1.position(0, 0), \
-                                                        heading = lane1.heading_at(0), \
-                                                        speed = self.config["initial_speed"]+starting_vel_offset)
-                
-                self.controlled_vehicles.append(vehicle)
-                self.road.vehicles.append(vehicle)
+        spawn_distance1 = 0 if 'behind' in self.spawn_config or 'adjacent' in self.spawn_config else spawn_distance
+        spawn_distance2 = spawn_distance if 'behind' in self.spawn_config else 0
 
-                lane2 = lane1
-                vehicle = other_vehicles_type(road = self.road, \
-                                            position = lane2.position(spawn_distance, 0), \
-                                            heading = lane2.heading_at(spawn_distance), \
-                                            speed = self.config["initial_speed"]+starting_vel_offset)
-                self.road.vehicles.append(vehicle)
-            elif self.spawn_config == 'adjacent_left':
-                lane1 = self.road.network.graph['0']['1'][0]
-                vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                        position = lane1.position(0, 0), \
-                                                        heading = lane1.heading_at(0), \
-                                                        speed = self.config["initial_speed"]+starting_vel_offset)
-                
-                self.controlled_vehicles.append(vehicle)
-                self.road.vehicles.append(vehicle)
-
-                lane2 = self.road.network.graph['0']['1'][1]
-                vehicle = other_vehicles_type(road = self.road, \
-                                            position = lane2.position(0, 0), \
-                                            heading = lane2.heading_at(0), \
-                                            speed = self.config["initial_speed"]+starting_vel_offset)
-                self.road.vehicles.append(vehicle)
-            elif self.spawn_config == 'adjacent_right':
-                lane1 = self.road.network.graph['0']['1'][1]
-                vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                        position = lane1.position(0, 0), \
-                                                        heading = lane1.heading_at(0), \
-                                                        speed = self.config["initial_speed"]+starting_vel_offset)
-                
-                self.controlled_vehicles.append(vehicle)
-                self.road.vehicles.append(vehicle)
-
-                lane2 = self.road.network.graph['0']['1'][0]
-                vehicle = other_vehicles_type(road = self.road, \
-                                            position = lane2.position(0, 0), \
-                                            heading = lane2.heading_at(0), \
-                                            speed = self.config["initial_speed"]+starting_vel_offset)
-                self.road.vehicles.append(vehicle)
-            elif self.spawn_config == 'forward_left':
-                lane1 = self.road.network.graph['0']['1'][0]
-                vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                        position = lane1.position(spawn_distance, 0), \
-                                                        heading = lane1.heading_at(spawn_distance), \
-                                                        speed = self.config["initial_speed"]+starting_vel_offset)
-                
-                self.controlled_vehicles.append(vehicle)
-                self.road.vehicles.append(vehicle)
-
-                lane2 = self.road.network.graph['0']['1'][1]
-                vehicle = other_vehicles_type(road = self.road, \
-                                            position = lane2.position(0, 0), \
-                                            heading = lane2.heading_at(0), \
-                                            speed = self.config["initial_speed"]+starting_vel_offset)
-                self.road.vehicles.append(vehicle)
-            elif self.spawn_config == 'forward_right':
-                lane1 = self.road.network.graph['0']['1'][1]
-                vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                        position = lane1.position(spawn_distance, 0), \
-                                                        heading = lane1.heading_at(spawn_distance), \
-                                                        speed = self.config["initial_speed"]+starting_vel_offset)
-                
-                self.controlled_vehicles.append(vehicle)
-                self.road.vehicles.append(vehicle)
-
-                lane2 = self.road.network.graph['0']['1'][0]
-                vehicle = other_vehicles_type(road = self.road, \
-                                            position = lane2.position(0, 0), \
-                                            heading = lane2.heading_at(0), \
-                                            speed = self.config["initial_speed"]+starting_vel_offset)
-                self.road.vehicles.append(vehicle)
-            elif self.spawn_config == 'forward_center':
-                lane1 = self.np_random.choice(self.road.network.graph['0']['1'])
-                vehicle = self.action_type.vehicle_class(road = self.road, \
-                                                        position = lane1.position(spawn_distance, 0), \
-                                                        heading = lane1.heading_at(spawn_distance), \
-                                                        speed = self.config["initial_speed"]+starting_vel_offset)
-                
-                self.controlled_vehicles.append(vehicle)
-                self.road.vehicles.append(vehicle)
-
-                lane2 = lane1
-                vehicle = other_vehicles_type(road = self.road, \
-                                            position = lane2.position(0, 0), \
-                                            heading = lane2.heading_at(0), \
-                                            speed = self.config["initial_speed"]+starting_vel_offset)
-                self.road.vehicles.append(vehicle)
+        # Create controlled vehicle
+        self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, starting_vel_offset)
+        
+        # Create other vehicle
+        self.create_vehicle(other_vehicles_type, lane2, spawn_distance2, starting_vel_offset)
 
     def _reward(self, action: Action) -> float:
         """
@@ -388,8 +188,10 @@ class CrashEnv(AbstractEnv):
         rewards = self._rewards(action)
         reward = sum(self.config.get(name, 0) * reward for name, reward in rewards.items())
         if self.config["adversarial"]:
+
             if self.config["normalize_reward"]:
-                reward = utils.lmap(reward, [-2,self.config["collision_reward"] + self.config["ttc_x_reward"] + self.config["ttc_y_reward"]], [0, 1])
+                reward = utils.lmap(reward, [-(self.config["ttc_x_reward"] + self.config["ttc_y_reward"]),self.config["collision_reward"] + self.config["ttc_x_reward"] + self.config["ttc_y_reward"]], [0, 1])
+
             return reward
         else:
             if self.config["normalize_reward"]:
@@ -407,15 +209,15 @@ class CrashEnv(AbstractEnv):
                 else self.vehicle.lane_index[2]
             # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
             
+            npc_vehicle = self.road.vehicles[1]
             ego_vehicle = self.road.vehicles[0]
-            other_vehicle = self.road.vehicles[1]
 
-            dx = other_vehicle.position[0] - ego_vehicle.position[0]
-            dy = other_vehicle.position[1] - ego_vehicle.position[1]
-            vx0 = (math.cos(ego_vehicle.heading))*ego_vehicle.speed
-            vx1 = (math.cos(other_vehicle.heading))*other_vehicle.speed
-            vy0 = (math.sin(ego_vehicle.heading))*ego_vehicle.speed
-            vy1 = (math.sin(other_vehicle.heading))*other_vehicle.speed
+            dx = ego_vehicle.position[0] - npc_vehicle.position[0]
+            dy = ego_vehicle.position[1] - npc_vehicle.position[1]
+            vx0 = (math.cos(npc_vehicle.heading))*npc_vehicle.speed
+            vx1 = (math.cos(ego_vehicle.heading))*ego_vehicle.speed
+            vy0 = (math.sin(npc_vehicle.heading))*npc_vehicle.speed
+            vy1 = (math.sin(ego_vehicle.heading))*ego_vehicle.speed
 
             dvx = vx1 - vx0
             dvy = vy1 - vy0
@@ -449,7 +251,7 @@ class CrashEnv(AbstractEnv):
             return {
                 "collision_reward": float(self.vehicle.crashed),
                 "ttc_x_reward": r_x,
-                "ttc_y_reward": r_y
+                "ttc_y_reward": r_y,
             }
         else:
             neighbours = self.road.network.all_side_lanes(self.vehicle.lane_index)
