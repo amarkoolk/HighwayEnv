@@ -263,7 +263,7 @@ class AbstractEnv(gym.Env):
             obs_shape = self.observation_space.shape
 
         frames_array = np.zeros((frames,obs_shape[0]*obs_shape[1]))
-
+        int_obs = np.zeros((5,5))
         for frame in range(frames):
             # Forward action to the vehicle
             if (
@@ -280,7 +280,25 @@ class AbstractEnv(gym.Env):
 
             self.road.act()
             self.road.step(1 / self.config["simulation_frequency"])
-            int_obs = self.observation_type.observe()
+            # int_obs = self.observation_type.observe()
+
+            int_obs[0:2,0] = 1
+
+            ego_vehicle = self.road.vehicles[0]
+            npc_vehicle = self.road.vehicles[1]
+
+            int_obs[0,1:3] = ego_vehicle.position
+            int_obs[1,1:3] = npc_vehicle.position - ego_vehicle.position
+
+            vx0 = (np.cos(npc_vehicle.heading))*npc_vehicle.speed
+            vx1 = (np.cos(ego_vehicle.heading))*ego_vehicle.speed
+            vy0 = (np.sin(npc_vehicle.heading))*npc_vehicle.speed
+            vy1 = (np.sin(ego_vehicle.heading))*ego_vehicle.speed
+
+            int_obs[0,3] = vx0
+            int_obs[0,4] = vy0
+            int_obs[1,3] = vx1 - vx0
+            int_obs[1,4] = vy1 - vy0
 
             # Check if there are multiple vehicle states or not
             if isinstance(int_obs, tuple):
