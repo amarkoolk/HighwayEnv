@@ -1,6 +1,7 @@
 from typing import Dict, Text, Optional
 
 import numpy as np
+import copy
 import math
 
 from highway_env import utils
@@ -224,6 +225,9 @@ class CrashEnv(AbstractEnv):
 
             ttc_x = dx/dvx if abs(dvx) > 1e-6 else dx/1e-6
             ttc_y = dy/dvy if abs(dvy) > 1e-6 else dy/1e-6
+
+            self.ttc_x = ttc_x
+            self.ttc_y = ttc_y
 
             # Calculate Rewards
             if abs(dvx) < self.unwrapped.config["tolerance"]:

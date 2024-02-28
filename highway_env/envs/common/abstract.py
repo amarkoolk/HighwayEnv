@@ -116,6 +116,7 @@ class AbstractEnv(gym.Env):
         frames_freq = self.config["simulation_frequency"] \
             if self._record_video_wrapper else self.config["policy_frequency"]
         self.metadata['render_fps'] = video_real_time_ratio * frames_freq
+        # self.metadata['render_fps'] = self.config["simulation_frequency"]
 
     def define_spaces(self) -> None:
         """
@@ -229,19 +230,29 @@ class AbstractEnv(gym.Env):
             raise NotImplementedError("The road and vehicle must be initialized in the environment implementation")
 
         self.time += 1 / self.config["policy_frequency"]
-        self._simulate(action)
+        int_frames = self._simulate(action)
 
         obs = self.observation_type.observe()
         reward = self._reward(action)
         terminated = self._is_terminated()
         truncated = self._is_truncated()
         info = self._info(obs, action)
+        info["int_frames"] = int_frames
 
         return obs, reward, terminated, truncated, info
 
     def _simulate(self, action: Optional[Action] = None) -> None:
         """Perform several steps of simulation with constant action."""
         frames = int(self.config["simulation_frequency"] // self.config["policy_frequency"])
+
+        # Size of Intermediate Frame Array
+        if isinstance(self.observation_space, gym.spaces.Tuple):
+            obs_shape = self.observation_space[0].shape
+        else:
+            obs_shape = self.observation_space.shape
+
+        frames_array = np.zeros((frames,obs_shape[0]*obs_shape[1]))
+
         for frame in range(frames):
             # Forward action to the vehicle
             if action is not None \
@@ -251,6 +262,14 @@ class AbstractEnv(gym.Env):
 
             self.road.act()
             self.road.step(1 / self.config["simulation_frequency"])
+            int_obs = self.observation_type.observe()
+
+            # Check if there are multiple vehicle states or not
+            if isinstance(int_obs, tuple):
+                frames_array[frame] = int_obs[0].flatten()
+            elif isinstance(int_obs, np.ndarray):
+                frames_array[frame] = int_obs.flatten()
+
             self.steps += 1
 
             # Automatically render intermediate simulation steps if a viewer has been launched
@@ -259,6 +278,7 @@ class AbstractEnv(gym.Env):
                 self._automatic_rendering()
 
         self.enable_auto_render = False
+        return frames_array
 
     def render(self, mode: str = 'rgb_array') -> Optional[np.ndarray]:
         """
