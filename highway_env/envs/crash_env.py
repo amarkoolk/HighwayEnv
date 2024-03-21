@@ -135,8 +135,8 @@ class CrashEnv(AbstractEnv):
         else:
             lane1, lane2 = [lanes[idx] for idx in lane_indices]
 
-        spawn_distance1 = 0 if self.spawn_config in ['behind_left', 'behind_right', 'adjacent_left', 'adjacent_right'] else spawn_distance
-        spawn_distance2 = spawn_distance if self.spawn_config in ['behind_left', 'behind_right'] else 0
+        spawn_distance1 = 0 if self.spawn_config in ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right'] else spawn_distance
+        spawn_distance2 = spawn_distance if self.spawn_config in ['behind_left', 'behind_right', 'behind_center'] else 0
 
         # Create Ego Vehicle
         self.create_vehicle(self.action_type.vehicle_class, lane2, spawn_distance2, starting_vel_offset)
