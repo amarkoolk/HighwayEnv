@@ -51,6 +51,8 @@ class CrashEnv(AbstractEnv):
             "spawn_configs" : ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center'],
             "adversarial": False,
             "reward_speed_range": [20, 30],
+            "use_mobil": False,
+            "ego_vs_mobil" : False
         })
         return config
 
@@ -137,11 +139,17 @@ class CrashEnv(AbstractEnv):
 
         spawn_distance1 = 0 if self.spawn_config in ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right'] else spawn_distance
         spawn_distance2 = spawn_distance if self.spawn_config in ['behind_left', 'behind_right', 'behind_center'] else 0
+        other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
+        if self.config["use_mobil"]:
+            # Create Mobil Vehicle
+            self.create_vehicle(other_vehicles_type, lane2, spawn_distance1, starting_vel_offset)
+            # Create Controlled Vehicle
+            self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, starting_vel_offset, color = (100, 200, 255))
+        else:
+            # Create Ego and NPC Vehicles
+            self.create_vehicle(self.action_type.vehicle_class, lane2, spawn_distance2, starting_vel_offset)
+            self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, starting_vel_offset, color = (100, 200, 255))
 
-        # Create Ego Vehicle
-        self.create_vehicle(self.action_type.vehicle_class, lane2, spawn_distance2, starting_vel_offset)
-        # Create NPC Vehicle
-        self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, starting_vel_offset, color = (100, 200, 255))
 
 
     def single_controlled_vehicle_spawn(self):
@@ -186,6 +194,7 @@ class CrashEnv(AbstractEnv):
         :param action: the last action performed
         :return: the corresponding reward
         """
+        
         rewards = self._rewards(action)
         reward = sum(self.config.get(name, 0) * reward for name, reward in rewards.items())
         if self.config["adversarial"]:
@@ -210,15 +219,16 @@ class CrashEnv(AbstractEnv):
                 else self.vehicle.lane_index[2]
             # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
             
-            npc_vehicle = self.road.vehicles[1]
             ego_vehicle = self.road.vehicles[0]
+            npc_vehicle = self.road.vehicles[1]
 
-            dx = ego_vehicle.position[0] - npc_vehicle.position[0]
-            dy = ego_vehicle.position[1] - npc_vehicle.position[1]
-            vx0 = (math.cos(npc_vehicle.heading))*npc_vehicle.speed
-            vx1 = (math.cos(ego_vehicle.heading))*ego_vehicle.speed
-            vy0 = (math.sin(npc_vehicle.heading))*npc_vehicle.speed
-            vy1 = (math.sin(ego_vehicle.heading))*ego_vehicle.speed
+            dx = npc_vehicle.position[0] - ego_vehicle.position[0]
+            dy = npc_vehicle.position[1] - ego_vehicle.position[1]
+
+            vx0 = (math.cos(ego_vehicle.heading))*ego_vehicle.speed
+            vx1 = (math.cos(npc_vehicle.heading))*npc_vehicle.speed
+            vy0 = (math.sin(ego_vehicle.heading))*ego_vehicle.speed
+            vy1 = (math.sin(npc_vehicle.heading))*npc_vehicle.speed
 
             dvx = vx1 - vx0
             dvy = vy1 - vy0
@@ -229,10 +239,12 @@ class CrashEnv(AbstractEnv):
             self.ttc_x = ttc_x
             self.ttc_y = ttc_y
 
+            
+
             # Calculate Rewards
             if abs(dvx) < self.unwrapped.config["tolerance"]:
                 if abs(dx) < self.unwrapped.config["tolerance"]:
-                    r_x = self.unwrapped.config['ttc_x_reward']
+                    r_x = 1.0
                 else:
                     r_x = 0
             else:
@@ -243,7 +255,7 @@ class CrashEnv(AbstractEnv):
             
             if abs(dvy) < self.unwrapped.config["tolerance"]:
                 if abs(dy) < self.unwrapped.config["tolerance"]:
-                    r_y = self.unwrapped.config['ttc_y_reward']
+                    r_y = 1.0
                 else:
                     r_y = 0
             else:
@@ -251,6 +263,24 @@ class CrashEnv(AbstractEnv):
                     r_y = 1.0/(1.0 + math.exp(-4-0.1*ttc_y)) if ttc_y <= 0 else -1.0/(1.0 + math.exp(4-0.1*ttc_y))
                 except OverflowError:
                     r_y = 0.0
+
+            # Debug Messages
+            # print("Ego X: ", ego_vehicle.position[0])
+            # print("Ego Y: ", ego_vehicle.position[1])
+            # print("Ego VX: ", vx0)
+            # print("Ego VY: ", vy0)
+            # print("NPC X: ", npc_vehicle.position[0])
+            # print("NPC Y: ", npc_vehicle.position[1])
+            # print("NPC VX: ", vx1)
+            # print("NPC VY: ", vy1)
+            # print("DX: ", dx)
+            # print("DY: ", dy)
+            # print("DVX: ", dvx)
+            # print("DVY: ", dvy)
+            # print("TTC X: ", ttc_x)
+            # print("TTC Y: ", ttc_y)
+            # print("R_X: ", r_x)
+            # print("R_Y: ", r_y)
             
             return {
                 "collision_reward": float(self.vehicle.crashed),

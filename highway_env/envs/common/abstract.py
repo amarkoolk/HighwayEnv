@@ -280,25 +280,28 @@ class AbstractEnv(gym.Env):
 
             self.road.act()
             self.road.step(1 / self.config["simulation_frequency"])
-            # int_obs = self.observation_type.observe()
+            # fake_obs = self.observation_type.observe()
+            # print(f"ORIGINAL: {fake_obs}")
 
             int_obs[0:2,0] = 1
 
             ego_vehicle = self.road.vehicles[0]
             npc_vehicle = self.road.vehicles[1]
+            # print(f"FRAME: {frame}, EGO SPEED: {ego_vehicle.speed}, NPC SPEED: {npc_vehicle.speed}")
 
             int_obs[0,1:3] = ego_vehicle.position
             int_obs[1,1:3] = npc_vehicle.position - ego_vehicle.position
 
-            vx0 = (np.cos(npc_vehicle.heading))*npc_vehicle.speed
-            vx1 = (np.cos(ego_vehicle.heading))*ego_vehicle.speed
-            vy0 = (np.sin(npc_vehicle.heading))*npc_vehicle.speed
-            vy1 = (np.sin(ego_vehicle.heading))*ego_vehicle.speed
+            vx1 = (np.cos(npc_vehicle.heading))*npc_vehicle.speed
+            vx0 = (np.cos(ego_vehicle.heading))*ego_vehicle.speed
+            vy1 = (np.sin(npc_vehicle.heading))*npc_vehicle.speed
+            vy0 = (np.sin(ego_vehicle.heading))*ego_vehicle.speed
 
             int_obs[0,3] = vx0
             int_obs[0,4] = vy0
             int_obs[1,3] = vx1 - vx0
             int_obs[1,4] = vy1 - vy0
+            # print(f"AFTER: {int_obs}")
 
             # Check if there are multiple vehicle states or not
             if isinstance(int_obs, tuple):
