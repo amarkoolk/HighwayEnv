@@ -49,7 +49,7 @@ class ExitEnv(HighwayEnv):
         info.update({"is_success": self._is_success()})
         return obs, reward, terminal, info
 
-    def _create_road(self, road_length=1000, exit_position=400, exit_length=100) -> None:
+    def _create_road(self, road_length=5000, exit_position=400, exit_length=100) -> None:
         net = RoadNetwork.straight_road_network(self.config["lanes_count"], start=0,
                                                 length=exit_position, nodes_str=("0", "1"))
         net = RoadNetwork.straight_road_network(self.config["lanes_count"] + 1, start=exit_position,

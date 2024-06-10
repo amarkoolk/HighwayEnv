@@ -61,9 +61,6 @@ class IDMVehicle(ControlledVehicle):
         self.timer = timer or (np.sum(self.position)*np.pi) % self.LANE_CHANGE_DELAY
         self.color = color
 
-    def randomize_behavior(self):
-        self.DELTA = self.road.np_random.uniform(low=self.DELTA_RANGE[0], high=self.DELTA_RANGE[1])
-
     @classmethod
     def create_from(cls, vehicle: ControlledVehicle) -> "IDMVehicle":
         """
