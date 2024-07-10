@@ -140,15 +140,22 @@ class CrashEnv(AbstractEnv):
         spawn_distance1 = 0 if self.spawn_config in ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right'] else spawn_distance
         spawn_distance2 = spawn_distance if self.spawn_config in ['behind_left', 'behind_right', 'behind_center'] else 0
         other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
+
         if self.config["use_mobil"]:
-            # Create Mobil Vehicle
-            self.create_vehicle(other_vehicles_type, lane2, spawn_distance1, starting_vel_offset)
-            # Create Controlled Vehicle
-            self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, starting_vel_offset, color = (100, 200, 255))
+            if self.config["ego_vs_mobil"]:
+                # Create Mobil Vehicle
+                self.create_vehicle(other_vehicles_type, lane1, spawn_distance1, starting_vel_offset, color = (100, 200, 255))
+                # Create Controlled Vehicle
+                self.create_vehicle(self.action_type.vehicle_class, lane2, spawn_distance2, starting_vel_offset)
+            else:
+                # Create Mobil Vehicle
+                self.create_vehicle(other_vehicles_type, lane2, spawn_distance2, starting_vel_offset, color = (100, 200, 255))
+                # Create Controlled Vehicle
+                self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, starting_vel_offset, color = (255, 0, 0))
         else:
             # Create Ego and NPC Vehicles
             self.create_vehicle(self.action_type.vehicle_class, lane2, spawn_distance2, starting_vel_offset)
-            self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, starting_vel_offset, color = (100, 200, 255))
+            self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, starting_vel_offset, color = (255, 0, 0))
 
 
 
@@ -294,10 +301,14 @@ class CrashEnv(AbstractEnv):
             # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
             forward_speed = self.vehicle.speed * np.cos(self.vehicle.heading)
             scaled_speed = utils.lmap(forward_speed, self.config["reward_speed_range"], [0, 1])
+            if scaled_speed < 0:
+                scaled_speed = 0
+            if scaled_speed > 1:
+                scaled_speed = 0
             return {
                 "collision_reward": float(self.vehicle.crashed),
                 "right_lane_reward": lane / max(len(neighbours) - 1, 1),
-                "high_speed_reward": np.clip(scaled_speed, 0, 1),
+                "high_speed_reward": np.clip(scaled_speed, 0, 1), # TODO: Don't reward speeding past max of 1
                 "on_road_reward": float(self.vehicle.on_road)
             }
     
