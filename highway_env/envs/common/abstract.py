@@ -44,7 +44,7 @@ class AbstractEnv(gym.Env):
     def __init__(self, config: dict = None, render_mode: str | None = None) -> None:
         super().__init__()
 
-        # Configuration
+        # Configuration              
         self.config = self.default_config()
         self.configure(config)
 
