@@ -56,7 +56,7 @@ class Vehicle(RoadObject):
         lane_to: str | None = None,
         lane_id: int | None = None,
         spacing: float = 1,
-                      speed_range: Tuple[float, float] = (-40, 40),,
+        speed_range: Tuple[float, float] = (-40, 40)
     ) -> Vehicle:
         """
         Create a random vehicle on the road.
