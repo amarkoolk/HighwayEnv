@@ -270,24 +270,6 @@ class CrashEnv(AbstractEnv):
                     r_y = 1.0/(1.0 + math.exp(-4-0.1*ttc_y)) if ttc_y <= 0 else -1.0/(1.0 + math.exp(4-0.1*ttc_y))
                 except OverflowError:
                     r_y = 0.0
-
-            # Debug Messages
-            # print("Ego X: ", ego_vehicle.position[0])
-            # print("Ego Y: ", ego_vehicle.position[1])
-            # print("Ego VX: ", vx0)
-            # print("Ego VY: ", vy0)
-            # print("NPC X: ", npc_vehicle.position[0])
-            # print("NPC Y: ", npc_vehicle.position[1])
-            # print("NPC VX: ", vx1)
-            # print("NPC VY: ", vy1)
-            # print("DX: ", dx)
-            # print("DY: ", dy)
-            # print("DVX: ", dvx)
-            # print("DVY: ", dvy)
-            # print("TTC X: ", ttc_x)
-            # print("TTC Y: ", ttc_y)
-            # print("R_X: ", r_x)
-            # print("R_Y: ", r_y)
             
             return {
                 "collision_reward": float(self.vehicle.crashed),
@@ -333,7 +315,12 @@ class CrashEnv(AbstractEnv):
             'dvy': self.dvy
         }
         try:
-            info["rewards"] = self._rewards(action)
+            rewards = self._rewards(action)
+            for name, reward in rewards.items():
+                if "rewards" not in info:
+                    info["rewards"] = {}
+                info["rewards"][f"{name}"] = reward * self.config.get(name, 0)
+
         except NotImplementedError:
             pass
         return info
