@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from itertools import product
 from typing import TYPE_CHECKING
 
@@ -32,6 +32,10 @@ class ObservationType:
     def observe(self):
         """Get an observation of the environment state."""
         raise NotImplementedError()
+    
+    def reset(self):
+        """Reset the observation type (if needed)."""
+        pass
 
     @property
     def observer_vehicle(self):
@@ -169,6 +173,7 @@ class KinematicObservation(ObservationType):
         see_behind: bool = False,
         observe_intentions: bool = False,
         include_obstacles: bool = True,
+        frame_stack: int = 1,
         **kwargs: dict,
     ) -> None:
         """
@@ -194,10 +199,31 @@ class KinematicObservation(ObservationType):
         self.see_behind = see_behind
         self.observe_intentions = observe_intentions
         self.include_obstacles = include_obstacles
+        self.frame_stack = frame_stack
+
+        self.observation_buffer = deque(
+            [np.zeros((vehicles_count, len(self.features)), dtype=np.float32)]
+            * frame_stack,
+            maxlen=frame_stack
+        )
+
+    def reset(self) -> None:
+        """
+        Reset the observation buffer at the start of each episode.
+        Call this in your environment's reset() or anywhere you see fit
+        to ensure a fresh stack for the new episode.
+        """
+        self.observation_buffer.clear()
+        # Fill with zeros so that at the first step we return only the current
+        # observation plus zeros for the "past" frames
+        for _ in range(self.frame_stack):
+            self.observation_buffer.append(
+                np.zeros((self.vehicles_count, len(self.features)), dtype=np.float32)
+            )
 
     def space(self) -> spaces.Space:
         return spaces.Box(
-            shape=(self.vehicles_count, len(self.features)),
+            shape=(self.vehicles_count, len(self.features) * self.frame_stack),
             low=-np.inf,
             high=np.inf,
             dtype=np.float32,
@@ -208,7 +234,7 @@ class KinematicObservation(ObservationType):
         Normalize the observation values.
 
         For now, assume that the road is straight along the x axis.
-        :param Dataframe df: observation data
+        :param df: observation data
         """
         if not self.features_range:
             side_lanes = self.env.road.network.all_side_lanes(
@@ -231,11 +257,14 @@ class KinematicObservation(ObservationType):
         return df
 
     def observe(self) -> np.ndarray:
+        # If the environment has no road, just return zeros
         if not self.env.road:
-            return np.zeros(self.space().shape)
+            # Return a stack of zeros, since we still have frame_stack
+            return np.zeros(self.space().shape, dtype=np.float32)
 
-        # Add ego-vehicle
+        # Create a DataFrame for the ego-vehicle
         df = pd.DataFrame.from_records([self.observer_vehicle.to_dict()])
+
         # Add nearby traffic
         close_vehicles = self.env.road.close_objects_to(
             self.observer_vehicle,
@@ -250,29 +279,47 @@ class KinematicObservation(ObservationType):
             vehicles_df = pd.DataFrame.from_records(
                 [
                     v.to_dict(origin, observe_intentions=self.observe_intentions)
-                    for v in close_vehicles[-self.vehicles_count + 1 :]
+                    for v in close_vehicles[-self.vehicles_count + 1:]
                 ]
             )
             df = pd.concat([df, vehicles_df], ignore_index=True)
 
+        # Keep only the requested features
         df = df[self.features]
 
-        # Normalize and clip
+        # Normalize if needed
         if self.normalize:
             df = self.normalize_obs(df)
-        # Fill missing rows
+
+        # Fill missing rows if fewer than self.vehicles_count
         if df.shape[0] < self.vehicles_count:
-            rows = np.zeros((self.vehicles_count - df.shape[0], len(self.features)))
+            needed = self.vehicles_count - df.shape[0]
+            rows = np.zeros((needed, len(self.features)))
             df = pd.concat(
-                [df, pd.DataFrame(data=rows, columns=self.features)], ignore_index=True
+                [df, pd.DataFrame(data=rows, columns=self.features)],
+                ignore_index=True
             )
-        # Reorder
+
+        # Reorder columns to maintain the given features ordering
         df = df[self.features]
+
+        # Convert to a numpy array
         obs = df.values.copy()
+
+        # Possibly shuffle (beyond the ego-vehicle) if 'shuffled' is set
         if self.order == "shuffled":
             self.env.np_random.shuffle(obs[1:])
-        # Flatten
-        return obs.astype(self.space().dtype)
+
+        # Now obs has shape (vehicles_count, len(features)).
+        # Update our rolling buffer with this new frame.
+        obs = obs.astype(np.float32)
+        self.observation_buffer.append(obs)
+
+        # Concatenate frames in the buffer along the last axis
+        # so final shape is (vehicles_count, len(features)*frame_stack)
+        stacked_obs = np.concatenate(list(self.observation_buffer), axis=-1)
+
+        return stacked_obs
 
 
 class OccupancyGridObservation(ObservationType):

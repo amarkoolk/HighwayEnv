@@ -52,7 +52,7 @@ class CrashEnv(AbstractEnv):
             "adversarial": False,
             "reward_speed_range": [20, 30],
             "use_mobil": False,
-            "ego_vs_mobil" : False
+            "ego_vs_mobil" : False,
         })
         return config
 
@@ -140,6 +140,7 @@ class CrashEnv(AbstractEnv):
         spawn_distance1 = 0 if self.spawn_config in ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right'] else spawn_distance
         spawn_distance2 = spawn_distance if self.spawn_config in ['behind_left', 'behind_right', 'behind_center'] else 0
         other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
+
 
         if self.config["use_mobil"]:
             if self.config["ego_vs_mobil"]:
@@ -237,6 +238,7 @@ class CrashEnv(AbstractEnv):
             vy0 = (math.sin(ego_vehicle.heading))*ego_vehicle.speed
             vy1 = (math.sin(npc_vehicle.heading))*npc_vehicle.speed
 
+
             dvx = vx1 - vx0
             dvy = vy1 - vy0
 
@@ -245,6 +247,7 @@ class CrashEnv(AbstractEnv):
 
             self.ttc_x = ttc_x
             self.ttc_y = ttc_y
+
 
             
 
@@ -270,6 +273,7 @@ class CrashEnv(AbstractEnv):
                     r_y = 1.0/(1.0 + math.exp(-4-0.1*ttc_y)) if ttc_y <= 0 else -1.0/(1.0 + math.exp(4-0.1*ttc_y))
                 except OverflowError:
                     r_y = 0.0
+
             
             return {
                 "collision_reward": float(self.vehicle.crashed),

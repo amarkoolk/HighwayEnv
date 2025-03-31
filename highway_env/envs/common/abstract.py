@@ -207,6 +207,7 @@ class AbstractEnv(gym.Env):
         self.done = False
         self._reset()
         self.define_spaces()  # Second, to link the obs and actions to the vehicles once the scene is created
+        self.observation_type.reset()  # Reset the observation type to the new scene
         obs = self.observation_type.observe()
         info = self._info(obs, action=self.action_space.sample())
         if self.render_mode == "human":
@@ -263,7 +264,7 @@ class AbstractEnv(gym.Env):
             obs_shape = self.observation_space.shape
 
         frames_array = np.zeros((frames,obs_shape[0]*obs_shape[1]))
-        int_obs = np.zeros((5,5))
+        int_obs = np.zeros(obs_shape)
         for frame in range(frames):
             # Forward action to the vehicle
             if (
