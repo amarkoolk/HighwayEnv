@@ -37,10 +37,11 @@ class CrashEnv(AbstractEnv):
             "lanes_count": 2,
             "controlled_vehicles": 1,
             "initial_lane_id": None,
-            "initial_speed" : 25,
+            "initial_speed" : 20,
             "duration": 40,  # [s]
             "mean_distance": 20,
             "mean_delta_v": 0,
+            "use_spawn_distribution": True,
             "vehicles_density": 1,
             "collision_reward": 1,    # The reward received when colliding with a vehicle.
             "ttc_x_reward": 1,  # The reward range for time to collision in the x direction with the ego vehicle.
@@ -114,8 +115,12 @@ class CrashEnv(AbstractEnv):
     def dual_controlled_vehicle_spawn(self):
         spawn_configs = self.config["spawn_configs"]
         self.spawn_config = self.np_random.choice(spawn_configs)
-        spawn_distance = self.np_random.normal(self.config["mean_distance"], self.config["mean_distance"] / 10)
-        starting_vel_offset = self.np_random.normal(self.config["mean_delta_v"], 5)
+        if self.config["use_spawn_distribution"]:
+            spawn_distance = self.np_random.normal(self.config["mean_distance"], self.config["mean_distance"] / 10)
+            starting_vel_offset = self.np_random.normal(self.config["mean_delta_v"], 5)
+        else:
+            spawn_distance = self.config["mean_distance"]
+            starting_vel_offset = self.config["mean_delta_v"]
         self.controlled_vehicles = []
 
         lanes = self.road.network.graph['0']['1']
@@ -147,15 +152,15 @@ class CrashEnv(AbstractEnv):
                 # Create Mobil Vehicle
                 self.create_vehicle(other_vehicles_type, lane1, spawn_distance1, starting_vel_offset, color = (100, 200, 255))
                 # Create Controlled Vehicle
-                self.create_vehicle(self.action_type.vehicle_class, lane2, spawn_distance2, starting_vel_offset)
+                self.create_vehicle(self.action_type.vehicle_class, lane2, spawn_distance2, 0)
             else:
                 # Create Mobil Vehicle
                 self.create_vehicle(other_vehicles_type, lane2, spawn_distance2, starting_vel_offset, color = (100, 200, 255))
                 # Create Controlled Vehicle
-                self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, starting_vel_offset, color = (255, 0, 0))
+                self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, 0, color = (255, 0, 0))
         else:
             # Create Ego and NPC Vehicles
-            self.create_vehicle(self.action_type.vehicle_class, lane2, spawn_distance2, starting_vel_offset)
+            self.create_vehicle(self.action_type.vehicle_class, lane2, spawn_distance2, 0)
             self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, starting_vel_offset, color = (255, 0, 0))
 
 
@@ -164,8 +169,12 @@ class CrashEnv(AbstractEnv):
         other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
         spawn_configs = self.config["spawn_configs"]
         self.spawn_config = self.np_random.choice(spawn_configs)
-        spawn_distance = self.np_random.normal(self.config["mean_distance"], self.config["mean_distance"] / 10)
-        starting_vel_offset = self.np_random.normal(self.config["mean_delta_v"], 5)
+        if self.config["use_spawn_distribution"]:
+            spawn_distance = self.np_random.normal(self.config["mean_distance"], self.config["mean_distance"] / 10)
+            starting_vel_offset = self.np_random.normal(self.config["mean_delta_v"], 5)
+        else:
+            spawn_distance = self.config["mean_distance"]
+            starting_vel_offset = self.config["mean_delta_v"]
         self.controlled_vehicles = []
 
         lanes = self.road.network.graph['0']['1']
@@ -191,10 +200,11 @@ class CrashEnv(AbstractEnv):
         spawn_distance2 = spawn_distance if self.spawn_config in ['behind_left', 'behind_right', 'behind_center'] else 0
 
         # Create controlled vehicle
+        print(f"Starting Vel Offset: {starting_vel_offset}, Spawn Distance1: {spawn_distance1}, Spawn Distance2: {spawn_distance2}")
         self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, starting_vel_offset)
         
         # Create other vehicle
-        self.create_vehicle(other_vehicles_type, lane2, spawn_distance2, starting_vel_offset)
+        self.create_vehicle(other_vehicles_type, lane2, spawn_distance2, 0)
 
     def _reward(self, action: Action) -> float:
         """
@@ -247,7 +257,6 @@ class CrashEnv(AbstractEnv):
 
             self.ttc_x = ttc_x
             self.ttc_y = ttc_y
-
 
             
 
@@ -316,7 +325,8 @@ class CrashEnv(AbstractEnv):
             'dx': self.dx,
             'dy': self.dy,
             'dvx': self.dvx,
-            'dvy': self.dvy
+            'dvy': self.dvy,
+            "vehicle_states": self.get_vehicle_states()
         }
         try:
             rewards = self._rewards(action)
@@ -337,3 +347,18 @@ class CrashEnv(AbstractEnv):
     def _is_truncated(self) -> bool:
         """The episode is truncated if the time limit is reached."""
         return self.time >= self.config["duration"]
+
+    def get_vehicle_states(self) -> np.ndarray:
+
+        """
+        Get the states of the vehicles in the environment.
+        :return: A numpy array of shape (num_vehicles, 6) where each row represents a vehicle's state
+                 (x, y, vx, vy, heading, lane_id).
+        """
+        vehicle_states = []
+        for vehicle in self.road.vehicles:
+            if isinstance(vehicle, Vehicle):
+                state = np.array([vehicle.position[0], vehicle.position[1], vehicle.speed * np.cos(vehicle.heading), vehicle.speed * np.sin(vehicle.heading), vehicle.heading, vehicle.lane_index[1]])
+                vehicle_states.append(state)
+
+        return np.array(vehicle_states)
