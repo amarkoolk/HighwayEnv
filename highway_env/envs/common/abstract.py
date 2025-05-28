@@ -38,7 +38,7 @@ class AbstractEnv(gym.Env):
         "render_modes": ["human", "rgb_array"],
     }
 
-    PERCEPTION_DISTANCE = 5.0 * Vehicle.MAX_SPEED
+    PERCEPTION_DISTANCE = 15.0 * Vehicle.MAX_SPEED
     """The maximum distance of any vehicle present in the observation [m]"""
 
     def __init__(self, config: dict = None, render_mode: str | None = None) -> None:
@@ -97,7 +97,7 @@ class AbstractEnv(gym.Env):
             "simulation_frequency": 15,  # [Hz]
             "policy_frequency": 1,  # [Hz]
             "other_vehicles_type": "highway_env.vehicle.behavior.IDMVehicle",
-            "screen_width": 600,  # [px]
+            "screen_width": 1500,  # [px]
             "screen_height": 150,  # [px]
             "centering_position": [0.3, 0.5],
             "scaling": 5.5,
@@ -112,7 +112,7 @@ class AbstractEnv(gym.Env):
         if config:
             self.config.update(config)
 
-    def update_metadata(self, video_real_time_ratio=2):
+    def update_metadata(self, video_real_time_ratio=1):
         frames_freq = (
             self.config["simulation_frequency"]
             if self._record_video_wrapper
@@ -236,6 +236,7 @@ class AbstractEnv(gym.Env):
             raise NotImplementedError(
                 "The road and vehicle must be initialized in the environment implementation"
             )
+        
 
         self.time += 1 / self.config["policy_frequency"]
         int_frames = self._simulate(action)

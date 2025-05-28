@@ -177,6 +177,7 @@ class CrashEnv(AbstractEnv):
             starting_vel_offset = self.config["mean_delta_v"]
         self.controlled_vehicles = []
 
+
         lanes = self.road.network.graph['0']['1']
         lane_configurations = {
             'behind_left': [0, 1],
@@ -200,10 +201,10 @@ class CrashEnv(AbstractEnv):
         spawn_distance2 = spawn_distance if self.spawn_config in ['behind_left', 'behind_right', 'behind_center'] else 0
 
         # Create controlled vehicle
-        print(f"Starting Vel Offset: {starting_vel_offset}, Spawn Distance1: {spawn_distance1}, Spawn Distance2: {spawn_distance2}")
         self.create_vehicle(self.action_type.vehicle_class, lane1, spawn_distance1, starting_vel_offset)
-        
+
         # Create other vehicle
+        starting_speed = self.np_random.choice(self.config['action']['action_config']['target_speeds']) - self.config["initial_speed"]
         self.create_vehicle(other_vehicles_type, lane2, spawn_distance2, 0)
 
     def _reward(self, action: Action) -> float:
@@ -212,7 +213,7 @@ class CrashEnv(AbstractEnv):
         :param action: the last action performed
         :return: the corresponding reward
         """
-        
+
         rewards = self._rewards(action)
         reward = sum(self.config.get(name, 0) * reward for name, reward in rewards.items())
         if self.config["adversarial"]:
@@ -236,7 +237,7 @@ class CrashEnv(AbstractEnv):
             lane = self.vehicle.target_lane_index[2] if isinstance(self.vehicle, ControlledVehicle) \
                 else self.vehicle.lane_index[2]
             # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
-            
+
             ego_vehicle = self.road.vehicles[0]
             npc_vehicle = self.road.vehicles[1]
 
@@ -258,7 +259,7 @@ class CrashEnv(AbstractEnv):
             self.ttc_x = ttc_x
             self.ttc_y = ttc_y
 
-            
+
 
             # Calculate Rewards
             if abs(dvx) < self.unwrapped.config["tolerance"]:
@@ -271,7 +272,7 @@ class CrashEnv(AbstractEnv):
                     r_x = 1.0/(1.0 + math.exp(-4-0.1*ttc_x)) if ttc_x <= 0 else -1.0/(1.0 + math.exp(4-0.1*ttc_x))
                 except OverflowError:
                     r_x = 0.0
-            
+
             if abs(dvy) < self.unwrapped.config["tolerance"]:
                 if abs(dy) < self.unwrapped.config["tolerance"]:
                     r_y = 1.0
@@ -283,11 +284,14 @@ class CrashEnv(AbstractEnv):
                 except OverflowError:
                     r_y = 0.0
 
-            
+
             return {
                 "collision_reward": float(self.vehicle.crashed),
                 "ttc_x_reward": r_x,
                 "ttc_y_reward": r_y,
+                "right_lane_reward": 0.0,
+                "high_speed_reward": 0.0,
+                "on_road_reward": 0.0
             }
         else:
             neighbours = self.road.network.all_side_lanes(self.vehicle.lane_index)
@@ -304,9 +308,11 @@ class CrashEnv(AbstractEnv):
                 "collision_reward": float(self.vehicle.crashed),
                 "right_lane_reward": lane / max(len(neighbours) - 1, 1),
                 "high_speed_reward": np.clip(scaled_speed, 0, 1), # TODO: Don't reward speeding past max of 1
-                "on_road_reward": float(self.vehicle.on_road)
+                "on_road_reward": float(self.vehicle.on_road),
+                "ttc_x_reward": 0.0,
+                "ttc_y_reward": 0.0,
             }
-    
+
     def _info(self, obs: Observation, action: Optional[Action] = None) -> dict:
         """
         Return a dictionary of additional information
