@@ -232,86 +232,72 @@ class CrashEnv(AbstractEnv):
             return reward
 
     def _rewards(self, action: Action) -> Dict[Text, float]:
-        if self.config["adversarial"]:
-            neighbours = self.road.network.all_side_lanes(self.vehicle.lane_index)
-            lane = self.vehicle.target_lane_index[2] if isinstance(self.vehicle, ControlledVehicle) \
-                else self.vehicle.lane_index[2]
-            # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
+        neighbours = self.road.network.all_side_lanes(self.vehicle.lane_index)
+        lane = self.vehicle.target_lane_index[2] if isinstance(self.vehicle, ControlledVehicle) \
+            else self.vehicle.lane_index[2]
+        # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
 
-            ego_vehicle = self.road.vehicles[0]
-            npc_vehicle = self.road.vehicles[1]
+        ego_vehicle = self.road.vehicles[0]
+        npc_vehicle = self.road.vehicles[1]
 
-            dx = npc_vehicle.position[0] - ego_vehicle.position[0]
-            dy = npc_vehicle.position[1] - ego_vehicle.position[1]
+        dx = npc_vehicle.position[0] - ego_vehicle.position[0]
+        dy = npc_vehicle.position[1] - ego_vehicle.position[1]
 
-            vx0 = (math.cos(ego_vehicle.heading))*ego_vehicle.speed
-            vx1 = (math.cos(npc_vehicle.heading))*npc_vehicle.speed
-            vy0 = (math.sin(ego_vehicle.heading))*ego_vehicle.speed
-            vy1 = (math.sin(npc_vehicle.heading))*npc_vehicle.speed
-
-
-            dvx = vx1 - vx0
-            dvy = vy1 - vy0
-
-            ttc_x = dx/dvx if abs(dvx) > 1e-6 else dx/1e-6
-            ttc_y = dy/dvy if abs(dvy) > 1e-6 else dy/1e-6
-
-            self.ttc_x = ttc_x
-            self.ttc_y = ttc_y
+        vx0 = (math.cos(ego_vehicle.heading))*ego_vehicle.speed
+        vx1 = (math.cos(npc_vehicle.heading))*npc_vehicle.speed
+        vy0 = (math.sin(ego_vehicle.heading))*ego_vehicle.speed
+        vy1 = (math.sin(npc_vehicle.heading))*npc_vehicle.speed
 
 
+        dvx = vx1 - vx0
+        dvy = vy1 - vy0
 
-            # Calculate Rewards
-            if abs(dvx) < self.unwrapped.config["tolerance"]:
-                if abs(dx) < self.unwrapped.config["tolerance"]:
-                    r_x = 1.0
-                else:
-                    r_x = 0
+        ttc_x = dx/dvx if abs(dvx) > 1e-6 else dx/1e-6
+        ttc_y = dy/dvy if abs(dvy) > 1e-6 else dy/1e-6
+
+        self.ttc_x = ttc_x
+        self.ttc_y = ttc_y
+
+
+
+        # Calculate Rewards
+        if abs(dvx) < self.unwrapped.config["tolerance"]:
+            if abs(dx) < self.unwrapped.config["tolerance"]:
+                r_x = 1.0
             else:
-                try:
-                    r_x = 1.0/(1.0 + math.exp(-4-0.1*ttc_x)) if ttc_x <= 0 else -1.0/(1.0 + math.exp(4-0.1*ttc_x))
-                except OverflowError:
-                    r_x = 0.0
-
-            if abs(dvy) < self.unwrapped.config["tolerance"]:
-                if abs(dy) < self.unwrapped.config["tolerance"]:
-                    r_y = 1.0
-                else:
-                    r_y = 0
-            else:
-                try:
-                    r_y = 1.0/(1.0 + math.exp(-4-0.1*ttc_y)) if ttc_y <= 0 else -1.0/(1.0 + math.exp(4-0.1*ttc_y))
-                except OverflowError:
-                    r_y = 0.0
-
-
-            return {
-                "collision_reward": float(self.vehicle.crashed),
-                "ttc_x_reward": r_x,
-                "ttc_y_reward": r_y,
-                "right_lane_reward": 0.0,
-                "high_speed_reward": 0.0,
-                "on_road_reward": 0.0
-            }
+                r_x = 0
         else:
-            neighbours = self.road.network.all_side_lanes(self.vehicle.lane_index)
-            lane = self.vehicle.target_lane_index[2] if isinstance(self.vehicle, ControlledVehicle) \
-                else self.vehicle.lane_index[2]
-            # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
-            forward_speed = self.vehicle.speed * np.cos(self.vehicle.heading)
-            scaled_speed = utils.lmap(forward_speed, self.config["reward_speed_range"], [0, 1])
-            if scaled_speed < 0:
-                scaled_speed = 0
-            if scaled_speed > 1:
-                scaled_speed = 0
-            return {
-                "collision_reward": float(self.vehicle.crashed),
-                "right_lane_reward": lane / max(len(neighbours) - 1, 1),
-                "high_speed_reward": np.clip(scaled_speed, 0, 1), # TODO: Don't reward speeding past max of 1
-                "on_road_reward": float(self.vehicle.on_road),
-                "ttc_x_reward": 0.0,
-                "ttc_y_reward": 0.0,
-            }
+            try:
+                r_x = 1.0/(1.0 + math.exp(-4-0.1*ttc_x)) if ttc_x <= 0 else -1.0/(1.0 + math.exp(4-0.1*ttc_x))
+            except OverflowError:
+                r_x = 0.0
+
+        if abs(dvy) < self.unwrapped.config["tolerance"]:
+            if abs(dy) < self.unwrapped.config["tolerance"]:
+                r_y = 1.0
+            else:
+                r_y = 0
+        else:
+            try:
+                r_y = 1.0/(1.0 + math.exp(-4-0.1*ttc_y)) if ttc_y <= 0 else -1.0/(1.0 + math.exp(4-0.1*ttc_y))
+            except OverflowError:
+                r_y = 0.0
+
+        # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
+        forward_speed = self.vehicle.speed * np.cos(self.vehicle.heading)
+        scaled_speed = utils.lmap(forward_speed, self.config["reward_speed_range"], [0, 1])
+        if scaled_speed < 0:
+            scaled_speed = 0
+        if scaled_speed > 1:
+            scaled_speed = 0
+        return {
+            "collision_reward": float(self.vehicle.crashed),
+            "right_lane_reward": lane / max(len(neighbours) - 1, 1),
+            "high_speed_reward": np.clip(scaled_speed, 0, 1), # TODO: Don't reward speeding past max of 1
+            "on_road_reward": float(self.vehicle.on_road),
+            "ttc_x_reward": r_x,
+            "ttc_y_reward": r_y
+        }
 
     def _info(self, obs: Observation, action: Optional[Action] = None) -> dict:
         """
