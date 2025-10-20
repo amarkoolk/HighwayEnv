@@ -54,7 +54,7 @@ class CrashEnv(AbstractEnv):
             "reward_speed_range": [20, 30],
             "use_mobil": False,
             "ego_vs_mobil" : False,
-            "scenario": None,
+            "scenarios": None,
             "scenario_vehicles_type": "highway_env.vehicle.behavior.ScenarioVehicle",
         })
         return config
@@ -67,7 +67,7 @@ class CrashEnv(AbstractEnv):
         self.ttc_x = 0
         self.ttc_y = 0
         self._create_road()
-        if self.config["scenario"]:
+        if self.config["scenarios"]:
             self.scenario_spawn()
         if self.config['controlled_vehicles'] == 1:
             self.single_controlled_vehicle_spawn()
@@ -131,17 +131,17 @@ class CrashEnv(AbstractEnv):
             pass
 
     def scenario_spawn(self):
-        scenario_type = self.config["scenario"]
-        if scenario_type == "IdleFaster":
+        self.scenario_type = self.np_random.choice(self.config["scenarios"])
+        if self.scenario_type == "IdleFaster":
             self.config["spawn_configs"] = ['forward_right']
             self.config["mean_delta_v"] = -5.0
-        if scenario_type == "IdleSlower":
+        if self.scenario_type == "IdleSlower":
             self.config["spawn_configs"] = ['behind_left']
             self.config["mean_delta_v"] = 5.0
-        if scenario_type == "CutIn":
+        if self.scenario_type == "CutIn":
             self.config["spawn_configs"] = ['forward_right']
             self.config["mean_delta_v"] = 0.0
-        if scenario_type == "CutInSlowDown":
+        if self.scenario_type == "CutInSlowDown":
             self.config["spawn_configs"] = ['behind_right']
             self.config["mean_delta_v"] = 0.0
 
@@ -238,9 +238,9 @@ class CrashEnv(AbstractEnv):
 
         # Create other vehicle
         starting_speed = self.np_random.choice(self.config['action']['action_config']['target_speeds']) - self.config["initial_speed"]
-        if self.config["scenario"]:
+        if self.config["scenarios"]:
             scenario_type = utils.class_from_path(self.config["scenario_vehicles_type"])
-            self.create_vehicle(scenario_type, lane2, spawn_distance2, 0, color=(100,100,0), scenario = self.config["scenario"])
+            self.create_vehicle(scenario_type, lane2, spawn_distance2, 0, color=(100,100,0), scenario = self.scenario_type)
         else:
             self.create_vehicle(other_vehicles_type, lane2, spawn_distance2, 0)
 
