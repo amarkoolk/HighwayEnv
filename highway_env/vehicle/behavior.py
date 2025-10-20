@@ -1,13 +1,54 @@
 from __future__ import annotations
 
 import numpy as np
+from enum import Enum
+from typing import Optional, Tuple, Union
 
 from highway_env import utils
 from highway_env.road.road import LaneIndex, Road, Route
 from highway_env.utils import Vector
 from highway_env.vehicle.controller import ControlledVehicle
 from highway_env.vehicle.kinematics import Vehicle
+import highway_env.vehicle.scenarios as scenarios
 
+class ScenarioVehicle(ControlledVehicle):
+    """ControlledVehicle that delegates high-level action selection to a Scenario."""
+    # optional: ensure DELTA_SPEED exists for super().act() bumps
+    DELTA_SPEED: float = 2.5  # m/s (tweak as you like)
+
+    def __init__(self,
+                 road: Road,
+                 position: np.ndarray,
+                 heading: float = 0.0,
+                 speed: float = 0.0,
+                 target_lane_index=None,
+                 target_speed: Optional[float] = None,
+                 route=None,
+                 scenario=None,
+                 enable_lane_change: bool = True,
+                 **kwargs):
+        super().__init__(road, position, heading, speed,
+                         target_lane_index, target_speed, route)
+        self.scenario = scenario
+        self.enable_lane_change = enable_lane_change  # you can decide to ignore lane actions if False
+
+    def set_scenario(self, scenario) -> None:
+        self.scenario = scenario
+
+    def act(self, action: Union[dict, str, None] = None) -> None:
+        # ignore external action; we’re driven by the scenario
+
+        # Get Ego State (x, y)
+        ego_pos = self.position
+        
+        
+
+        scen_action = None
+        if self.scenario is not None and hasattr(self.scenario, "get_action"):
+            scen_action = self.scenario.get_action()
+
+
+        super().act(scen_action)
 
 class IDMVehicle(ControlledVehicle):
     """
