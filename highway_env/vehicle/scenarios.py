@@ -10,6 +10,17 @@ class Action(Enum):
     FASTER = "FASTER"
     SLOWER = "SLOWER"
 
+def scenario_factory(scenario : str = "IdleSlower", use_spawn_distribution : bool = False):
+    match scenario:
+        case "IdleSlower":
+            return IdleSlower(use_spawn_distribution=use_spawn_distribution)
+        case "IdleFaster":
+            return IdleFaster(use_spawn_distribution=use_spawn_distribution)
+        case "CutIn":
+            return CutIn(use_spawn_distribution=use_spawn_distribution)
+        case "CutInSlowDown":
+            return CutInSlowDown(use_spawn_distribution=use_spawn_distribution)
+
 
 class Scenario:
     def __init__(self, use_spawn_distribution: bool = False):
@@ -179,7 +190,7 @@ class CutIn(Scenario):
         if self.current_maneuver == self.CutInManeuver.ACCELERATE:
             # Accelerate for a fixed number of frames
             action = Action.FASTER.value
-            if self.maneuver_counter >= 10:  # Accelerate for 10 frames
+            if self.maneuver_counter >= 40:  # Accelerate for 10 frames
                 self.current_maneuver = self.CutInManeuver.CUTIN
                 self.maneuver_counter = 0
 
