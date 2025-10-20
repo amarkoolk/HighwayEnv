@@ -15,7 +15,7 @@ from highway_env.envs.common.action import Action, ActionType, action_factory
 from highway_env.envs.common.finite_mdp import finite_mdp
 from highway_env.envs.common.graphics import EnvViewer
 from highway_env.envs.common.observation import ObservationType, observation_factory
-from highway_env.vehicle.behavior import IDMVehicle
+from highway_env.vehicle.behavior import IDMVehicle, ScenarioVehicle
 from highway_env.vehicle.kinematics import Vehicle
 
 

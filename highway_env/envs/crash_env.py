@@ -54,6 +54,8 @@ class CrashEnv(AbstractEnv):
             "reward_speed_range": [20, 30],
             "use_mobil": False,
             "ego_vs_mobil" : False,
+            "scenarios": None,
+            "scenario_vehicles_type": "highway_env.vehicle.behavior.ScenarioVehicle",
         })
         return config
 
@@ -65,6 +67,8 @@ class CrashEnv(AbstractEnv):
         self.ttc_x = 0
         self.ttc_y = 0
         self._create_road()
+        if self.config["scenarios"]:
+            self.scenario_spawn()
         if self.config['controlled_vehicles'] == 1:
             self.single_controlled_vehicle_spawn()
         elif self.config['controlled_vehicles'] == 2:
@@ -97,20 +101,49 @@ class CrashEnv(AbstractEnv):
                 vehicle.randomize_behavior()
                 self.road.vehicles.append(vehicle)
 
-    def create_vehicle(self, vehicle_class, lane, spawn_distance, starting_vel_offset, color = None):
-        vehicle = vehicle_class(
-            road=self.road,
-            position=lane.position(spawn_distance, 0),
-            heading=lane.heading_at(spawn_distance),
-            speed=self.config["initial_speed"] + starting_vel_offset,
-            color = color
-        )
+    def create_vehicle(self, vehicle_class, lane, spawn_distance, starting_vel_offset, color = None, scenario = None):
+        if scenario:
+            vehicle = vehicle_class(
+                road=self.road,
+                position=lane.position(spawn_distance, 0),
+                heading=lane.heading_at(spawn_distance),
+                speed=self.config["initial_speed"] + starting_vel_offset,
+                target_speed = self.config["initial_speed"] + starting_vel_offset,
+                color = color,
+                scenario = scenario,
+                min_speed = np.min(self.config['action']['action_config']['target_speeds']),
+                max_speed = np.max(self.config['action']['action_config']['target_speeds'])
+            )
+        else:
+            vehicle = vehicle_class(
+                road=self.road,
+                position=lane.position(spawn_distance, 0),
+                heading=lane.heading_at(spawn_distance),
+                speed=self.config["initial_speed"] + starting_vel_offset,
+                target_speed = self.config["initial_speed"] + starting_vel_offset,
+                color = color
+            )
         self.road.vehicles.append(vehicle)
         try:
             if vehicle_class.func == self.action_type.vehicle_class.func:
                 self.controlled_vehicles.append(vehicle)
         except AttributeError:
             pass
+
+    def scenario_spawn(self):
+        self.scenario_type = self.np_random.choice(self.config["scenarios"])
+        if self.scenario_type == "IdleFaster":
+            self.config["spawn_configs"] = ['forward_right']
+            self.config["mean_delta_v"] = -5.0
+        if self.scenario_type == "IdleSlower":
+            self.config["spawn_configs"] = ['behind_left']
+            self.config["mean_delta_v"] = 5.0
+        if self.scenario_type == "CutIn":
+            self.config["spawn_configs"] = ['forward_right']
+            self.config["mean_delta_v"] = 0.0
+        if self.scenario_type == "CutInSlowDown":
+            self.config["spawn_configs"] = ['behind_right']
+            self.config["mean_delta_v"] = 0.0
 
     def dual_controlled_vehicle_spawn(self):
         spawn_configs = self.config["spawn_configs"]
@@ -205,7 +238,11 @@ class CrashEnv(AbstractEnv):
 
         # Create other vehicle
         starting_speed = self.np_random.choice(self.config['action']['action_config']['target_speeds']) - self.config["initial_speed"]
-        self.create_vehicle(other_vehicles_type, lane2, spawn_distance2, 0)
+        if self.config["scenarios"]:
+            scenario_type = utils.class_from_path(self.config["scenario_vehicles_type"])
+            self.create_vehicle(scenario_type, lane2, spawn_distance2, 0, color=(100,100,0), scenario = self.scenario_type)
+        else:
+            self.create_vehicle(other_vehicles_type, lane2, spawn_distance2, 0)
 
     def _reward(self, action: Action) -> float:
         """

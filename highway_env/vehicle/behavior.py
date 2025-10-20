@@ -1,13 +1,110 @@
 from __future__ import annotations
 
 import numpy as np
+from enum import Enum
+from typing import Optional, Tuple, Union
 
 from highway_env import utils
 from highway_env.road.road import LaneIndex, Road, Route
 from highway_env.utils import Vector
 from highway_env.vehicle.controller import ControlledVehicle
 from highway_env.vehicle.kinematics import Vehicle
+import highway_env.vehicle.scenarios as scenarios
 
+class ScenarioVehicle(ControlledVehicle):
+
+    TAU_ACC = 0.6  # [s]
+    TAU_HEADING = 0.2  # [s]
+    TAU_LATERAL = 0.6  # [s]
+
+    TAU_PURSUIT = 0.5 * TAU_HEADING  # [s]
+    KP_A = 1 / TAU_ACC
+    KP_HEADING = 1 / TAU_HEADING
+    KP_LATERAL = 1 / TAU_LATERAL  # [1/s]
+    MAX_STEERING_ANGLE = np.pi / 3  # [rad]
+    DELTA_SPEED = 5  # [m/s]
+
+    def __init__(self,
+                 road: Road,
+                 position: np.ndarray,
+                 heading: float = 0.0,
+                 speed: float = 0.0,
+                 target_lane_index=None,
+                 target_speed: Optional[float] = None,
+                 route=None,
+                 scenario=None,
+                 enable_lane_change: bool = True,
+                 min_speed: int = 15,
+                 max_speed: int = 30,
+                 **kwargs):
+        super().__init__(road, position, heading, speed,
+                         target_lane_index, target_speed, route)
+        self.scenario = scenarios.scenario_factory(scenario=scenario)
+        self.enable_lane_change = enable_lane_change  # you can decide to ignore lane actions if False
+        self.min_speed = min_speed
+        self.max_speed = max_speed
+
+    def set_scenario(self, scenario) -> None:
+        self.scenario = scenario
+
+    def act(self, action: Union[dict, str, None] = None) -> None:
+        assert len(self.road.vehicles) == 2
+
+        # Get Ego State (x, y)
+        ego_pos = self.position
+        id_self = id(self) % 1000
+        # Find NPC Position
+        for vehicle in self.road.vehicles:
+            if id(vehicle) % 1000 == id_self:
+                continue
+
+            npc_pos = vehicle.position
+
+        self.scenario.set_state(ego_pos, npc_pos)
+
+        scen_action = None
+        if self.scenario is not None and hasattr(self.scenario, "get_action"):
+            scen_action = self.scenario.get_action()
+
+        if scen_action == "FASTER":
+            self.target_speed += self.DELTA_SPEED
+        elif scen_action == "SLOWER":
+            self.target_speed -= self.DELTA_SPEED
+        elif scen_action == "LANE_RIGHT":
+            _from, _to, _id = self.target_lane_index
+            target_lane_index = (
+                _from,
+                _to,
+                np.clip(_id + 1, 0, len(self.road.network.graph[_from][_to]) - 1),
+            )
+            if self.road.network.get_lane(target_lane_index).is_reachable_from(
+                self.position
+            ):
+                self.target_lane_index = target_lane_index
+        elif scen_action == "LANE_LEFT":
+            _from, _to, _id = self.target_lane_index
+            target_lane_index = (
+                _from,
+                _to,
+                np.clip(_id - 1, 0, len(self.road.network.graph[_from][_to]) - 1),
+            )
+            if self.road.network.get_lane(target_lane_index).is_reachable_from(
+                self.position
+            ):
+                self.target_lane_index = target_lane_index
+
+        
+        self.target_speed = np.clip(self.target_speed, self.min_speed, self.max_speed)
+
+        action = {
+            "steering": self.steering_control(self.target_lane_index),
+            "acceleration": self.speed_control(self.target_speed),
+        }
+        action["steering"] = np.clip(
+            action["steering"], -self.MAX_STEERING_ANGLE, self.MAX_STEERING_ANGLE
+        )
+
+        Vehicle.act(self, action)
 
 class IDMVehicle(ControlledVehicle):
     """
