@@ -13,7 +13,6 @@ import highway_env.vehicle.scenarios as scenarios
 
 class ScenarioVehicle(ControlledVehicle):
     """ControlledVehicle that delegates high-level action selection to a Scenario."""
-    # optional: ensure DELTA_SPEED exists for super().act() bumps
     DELTA_SPEED: float = 2.5  # m/s (tweak as you like)
 
     def __init__(self,
@@ -40,6 +39,7 @@ class ScenarioVehicle(ControlledVehicle):
 
         # Get Ego State (x, y)
         ego_pos = self.position
+        print(self.position)
         
         
 
@@ -149,6 +149,8 @@ class IDMVehicle(ControlledVehicle):
         action["steering"] = np.clip(
             action["steering"], -self.MAX_STEERING_ANGLE, self.MAX_STEERING_ANGLE
         )
+
+        print(f"Road objects: {self.road.objects}")
 
         # Longitudinal: IDM
         front_vehicle, rear_vehicle = self.road.neighbour_vehicles(
