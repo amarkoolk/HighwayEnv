@@ -190,7 +190,7 @@ class CutIn(Scenario):
         if self.current_maneuver == self.CutInManeuver.ACCELERATE:
             # Accelerate for a fixed number of frames
             action = Action.FASTER.value
-            if self.maneuver_counter >= 40:  # Accelerate for 10 frames
+            if self.maneuver_counter >= 55:  # Accelerate for 55 frames
                 self.current_maneuver = self.CutInManeuver.CUTIN
                 self.maneuver_counter = 0
 
@@ -250,7 +250,7 @@ class CutInSlowDown(Scenario):
         if self.current_maneuver == self.CutInManeuver.WAIT:
             # Wait for a few frames before starting the maneuver
             action = Action.IDLE.value
-            if self.maneuver_counter >= 3:
+            if self.maneuver_counter >= 30:
                 self.current_maneuver = self.CutInManeuver.CUTIN
                 self.maneuver_counter = 0
 

@@ -54,17 +54,20 @@ class ScenarioVehicle(ControlledVehicle):
         ego_pos = self.position
         id_self = id(self) % 1000
         # Find NPC Position
+        npc_pos = None
         for vehicle in self.road.vehicles:
-            if id(vehicle) % 1000 == id_self:
+            if id(vehicle) % 1000 == id_self and isinstance(vehicle, ScenarioVehicle):
                 continue
 
             npc_pos = vehicle.position
+        
+        if npc_pos is None:
+            scen_action = "IDLE"
+        else:
+            self.scenario.set_state(ego_pos, npc_pos)
+            if self.scenario is not None and hasattr(self.scenario, "get_action"):
+                scen_action = self.scenario.get_action()
 
-        self.scenario.set_state(ego_pos, npc_pos)
-
-        scen_action = None
-        if self.scenario is not None and hasattr(self.scenario, "get_action"):
-            scen_action = self.scenario.get_action()
 
         if scen_action == "FASTER":
             self.target_speed += self.DELTA_SPEED

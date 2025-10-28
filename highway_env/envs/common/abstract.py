@@ -201,6 +201,7 @@ class AbstractEnv(gym.Env):
         super().reset(seed=seed, options=options)
         if options and "config" in options:
             self.configure(options["config"])
+
         self.update_metadata()
         self.define_spaces()  # First, to set the controlled vehicle class depending on action space
         self.time = self.steps = 0
