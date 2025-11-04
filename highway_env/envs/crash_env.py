@@ -58,9 +58,15 @@ class CrashEnv(AbstractEnv):
             "ego_vs_mobil" : False,
             "scenarios": None,
             "scenario_vehicles_type": "highway_env.vehicle.behavior.ScenarioVehicle",
-            "mobil_politeness": 1.0
+            "mobil_politeness": 1.0,
+            "trial_sampling": False
         })
         return config
+    
+    def trial_sample(self) -> None:
+        self.config["lanes_count"] = self.np_random.choice(range(2, 5))
+        self.config["vehicle_count"] = self.np_random.choice(range(1, 5))
+        self.config["mobil_politeness"] = self.np_random.uniform(0.0, 1.0)
 
     def _reset(self) -> None:
         self.dx = 0
@@ -70,9 +76,11 @@ class CrashEnv(AbstractEnv):
         self.ttc_x = 0
         self.ttc_y = 0
         if self.config['multi_car']:
-            self.config['lanes_count'] = self.np_random.choice(range(2, 5))
-            self.config['vehicle_count'] = self.np_random.choice(range(1, 5))
-            self.config["mobil_politeness"] = self.np_random.uniform(0.0, 1.0)
+            if self.config["trial_sampling"]:
+                if self.episode_num % 10 == 0:
+                    self.trial_sample()
+            else:
+                self.trial_sample()
         self._create_road()
         if self.config["scenarios"]:
             self.scenario_spawn()
@@ -83,6 +91,8 @@ class CrashEnv(AbstractEnv):
                 self.single_controlled_vehicle_spawn()
         elif self.config['controlled_vehicles'] == 2:
             self.dual_controlled_vehicle_spawn()
+
+        self.episode_num += 1
 
     def _create_road(self) -> None:
         """Create a road composed of straight adjacent lanes."""
