@@ -11,6 +11,7 @@ from highway_env.road.road import Road, RoadNetwork
 from highway_env.utils import near_split
 from highway_env.vehicle.controller import ControlledVehicle
 from highway_env.vehicle.kinematics import Vehicle
+from highway_env.vehicle.behavior import IDMVehicle
 
 Observation = np.ndarray
 
@@ -41,6 +42,7 @@ class CrashEnv(AbstractEnv):
             "duration": 40,  # [s]
             "mean_distance": 20,
             "mean_delta_v": 0,
+            "ego_spacing": 2,
             "use_spawn_distribution": True,
             "vehicles_density": 1,
             "collision_reward": 1,    # The reward received when colliding with a vehicle.
@@ -56,6 +58,7 @@ class CrashEnv(AbstractEnv):
             "ego_vs_mobil" : False,
             "scenarios": None,
             "scenario_vehicles_type": "highway_env.vehicle.behavior.ScenarioVehicle",
+            "mobil_politeness": 1.0
         })
         return config
 
@@ -66,11 +69,18 @@ class CrashEnv(AbstractEnv):
         self.dvy = 0
         self.ttc_x = 0
         self.ttc_y = 0
+        if self.config['multi_car']:
+            self.config['lanes_count'] = self.np_random.choice(range(2, 5))
+            self.config['vehicle_count'] = self.np_random.choice(range(1, 5))
+            self.config["mobil_politeness"] = self.np_random.uniform(0.0, 1.0)
         self._create_road()
         if self.config["scenarios"]:
             self.scenario_spawn()
         if self.config['controlled_vehicles'] == 1:
-            self.single_controlled_vehicle_spawn()
+            if self.config['multi_car']:
+                self.multi_car_spawn()
+            else:
+                self.single_controlled_vehicle_spawn()
         elif self.config['controlled_vehicles'] == 2:
             self.dual_controlled_vehicle_spawn()
 
@@ -101,7 +111,7 @@ class CrashEnv(AbstractEnv):
                 vehicle.randomize_behavior()
                 self.road.vehicles.append(vehicle)
 
-    def create_vehicle(self, vehicle_class, lane, spawn_distance, starting_vel_offset, color = None, scenario = None):
+    def create_vehicle(self, vehicle_class, lane, spawn_distance, starting_vel_offset, color = None, scenario = None, randomize = False):
         if scenario:
             vehicle = vehicle_class(
                 road=self.road,
@@ -123,6 +133,9 @@ class CrashEnv(AbstractEnv):
                 target_speed = self.config["initial_speed"] + starting_vel_offset,
                 color = color
             )
+            if randomize and isinstance(vehicle_class, IDMVehicle):
+                vehicle.set_politeness(self.config["mobil_politeness"])
+                vehicle.randomize_behavior()
         self.road.vehicles.append(vehicle)
         try:
             if vehicle_class.func == self.action_type.vehicle_class.func:
@@ -243,6 +256,54 @@ class CrashEnv(AbstractEnv):
             self.create_vehicle(scenario_type, lane2, spawn_distance2, 0, color=(100,100,0), scenario = self.scenario_type)
         else:
             self.create_vehicle(other_vehicles_type, lane2, spawn_distance2, 0)
+
+    def multi_car_spawn(self):
+        # First Check Lane Count
+        num_lanes = self.config['lanes_count']
+        if num_lanes < 2:
+            raise ValueError("At least 2 lanes are required for multi-car spawn.")
+
+        if self.config["use_spawn_distribution"]:
+            ego_dist = self.np_random.normal(100.0, 10.0)
+            starting_vel_offset = self.np_random.normal(self.config["mean_delta_v"], 5)
+        else:
+            ego_dist = 100.0
+            starting_vel_offset = self.config["mean_delta_v"]
+
+        self.controlled_vehicles = []
+        for _ in range(self.config["controlled_vehicles"]):
+            # Choose Random Lane for Ego Spawn
+            ego_lane_idx = self.np_random.choice(range(self.config['lanes_count']))
+            ego_lane = self.road.network.get_lane(('0', '1', ego_lane_idx))
+            self.create_vehicle(self.action_type.vehicle_class, ego_lane, ego_dist, starting_vel_offset)
+
+        occupancy_grid = np.zeros((self.config["lanes_count"], 3))
+        starting_dist = np.zeros((self.config["lanes_count"], 3))
+        occupancy_grid[ego_lane_idx, 1] = 1  # Mark ego vehicle's lane as occupied
+        starting_dist[ego_lane_idx, 1] = 100.0
+        self.spawn_config = ego_lane_idx
+        
+        other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
+        for idx in range(self.config["vehicles_count"]):
+
+            # Find Spot in Occupancy Grid - rows where sum is < 3
+            free_lanes = np.where(np.sum(occupancy_grid, axis=1) < 3)
+            lane_choice = self.np_random.choice(free_lanes[0]) if free_lanes[0].size > 0 else None
+
+            # Pick Empty Column
+            empty_columns = np.where(occupancy_grid[lane_choice] == 0)[0]
+            column_choice = self.np_random.choice(empty_columns) if empty_columns.size > 0 else None
+
+            occupancy_grid[lane_choice, column_choice] = 1
+            
+            # Calculate Starting Distance - Offset from row in front by 20 m
+            if self.config["use_spawn_distribution"]:
+                spawn_distance = self.np_random.normal(self.config["mean_distance"], self.config["mean_distance"] / 10)
+                starting_vel_offset = self.np_random.normal(self.config["mean_delta_v"], 5)
+            starting_dist[lane_choice, column_choice] = 100.0 + spawn_distance * (column_choice - 1)
+
+            lane = self.road.network.get_lane(('0', '1', lane_choice))
+            self.create_vehicle(other_vehicles_type, lane, starting_dist[lane_choice, column_choice], starting_vel_offset, randomize=True)
 
     def _reward(self, action: Action) -> float:
         """

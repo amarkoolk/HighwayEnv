@@ -166,6 +166,9 @@ class IDMVehicle(ControlledVehicle):
             low=self.DELTA_RANGE[0], high=self.DELTA_RANGE[1]
         )
 
+    def set_politeness(self, politeness: float):
+        self.POLITENESS = politeness
+
     @classmethod
     def create_from(cls, vehicle: ControlledVehicle) -> IDMVehicle:
         """
