@@ -59,13 +59,13 @@ class CrashEnv(AbstractEnv):
             "scenarios": None,
             "scenario_vehicles_type": "highway_env.vehicle.behavior.ScenarioVehicle",
             "mobil_politeness": 1.0,
-            "trial_sampling": False
+            "trial_sampling": False,
         })
         return config
     
     def trial_sample(self) -> None:
         self.config["lanes_count"] = self.np_random.choice(range(2, 5))
-        self.config["vehicle_count"] = self.np_random.choice(range(1, 5))
+        self.config["vehicles_count"] = self.np_random.choice(range(1, 5))
         self.config["mobil_politeness"] = self.np_random.uniform(0.0, 1.0)
 
     def _reset(self) -> None:
@@ -425,8 +425,8 @@ class CrashEnv(AbstractEnv):
             'dx': self.dx,
             'dy': self.dy,
             'dvx': self.dvx,
-            'dvy': self.dvy,
-            "vehicle_states": self.get_vehicle_states()
+            'dvy': self.dvy
+            # "vehicle_states": self.get_vehicle_states()
         }
         try:
             rewards = self._rewards(action)
