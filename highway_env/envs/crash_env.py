@@ -59,7 +59,10 @@ class CrashEnv(AbstractEnv):
             "scenarios": None,
             "scenario_vehicles_type": "highway_env.vehicle.behavior.ScenarioVehicle",
             "mobil_politeness": 1.0,
-            "trial_sampling": False,
+            "trial_episodes": 1,
+            "sample_reward_signal": False,
+            "reward_speed_lower": 20,
+            "reward_speed_upper": 30,
         })
         return config
     
@@ -67,6 +70,13 @@ class CrashEnv(AbstractEnv):
         self.config["lanes_count"] = self.np_random.choice(range(2, 5))
         self.config["vehicles_count"] = self.np_random.choice(range(1, 5))
         self.config["mobil_politeness"] = self.np_random.uniform(0.0, 1.0)
+
+        if(self.config["sample_reward_signal"]):
+            self.config["reward_speed_lower"] = self.np_random.uniform(15, 25)
+            self.config["reward_speed_upper"] = self.np_random.uniform(self.config["reward_speed_lower"], 35)
+            self.config["reward_speed_range"] = [self.config["reward_speed_lower"], self.config["reward_speed_upper"]]
+
+        print(f"Resampling with lanes_count={self.config['lanes_count']}, vehicles_count={self.config['vehicles_count']}, mobil_politeness={self.config['mobil_politeness']} reward_speed_range={self.config['reward_speed_range']}")
 
     def _reset(self) -> None:
         self.dx = 0
@@ -76,10 +86,7 @@ class CrashEnv(AbstractEnv):
         self.ttc_x = 0
         self.ttc_y = 0
         if self.config['multi_car']:
-            if self.config["trial_sampling"]:
-                if self.episode_num % 10 == 0:
-                    self.trial_sample()
-            else:
+            if self.episode_num % self.config["trial_episodes"] == 0:
                 self.trial_sample()
         self._create_road()
         if self.config["scenarios"]:
@@ -398,6 +405,7 @@ class CrashEnv(AbstractEnv):
             scaled_speed = 0
         if scaled_speed > 1:
             scaled_speed = 0
+
         return {
             "collision_reward": float(self.vehicle.crashed),
             "right_lane_reward": lane / max(len(neighbours) - 1, 1),
