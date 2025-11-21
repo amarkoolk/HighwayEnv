@@ -63,6 +63,7 @@ class RoadObject(ABC):
         self.crashed = False
         self.hit = False
         self.impact = np.zeros(self.position.shape)
+        self.collision_classification: Optional[CollisionClassification] = None
 
     @classmethod
     def make_on_lane(
@@ -117,6 +118,15 @@ class RoadObject(ABC):
                 self.hit = True
             if not other.solid:
                 other.hit = True
+            
+            # Classify collision using the already computed MTV (transition)
+            self.collision_classification = classify_collision(
+                self.polygon(), other.polygon(), transition
+            )
+            # Also set for other vehicle (with negated MTV)
+            other.collision_classification = classify_collision(
+                other.polygon(), self.polygon(), -transition
+            )
 
     def _is_colliding(self, other, dt):
         # Fast spherical pre-check
@@ -229,3 +239,215 @@ class Landmark(RoadObject):
     ):
         super().__init__(road, position, heading, speed)
         self.solid = False
+
+
+# Collision Classification Logic
+
+from dataclasses import dataclass
+from typing import Optional, List
+
+# Vertex indices (CCW from rear-right)
+VERTEX_NAMES = {
+    0: "rear-left corner",   
+    1: "rear-right corner", 
+    2: "front-right corner", 
+    3: "front-left corner", 
+}
+
+EDGE_NAMES = {
+    0: "rear edge",    
+    1: "right edge",   
+    2: "front edge",   
+    3: "left edge",    
+}
+
+# Which vertices form which edges
+EDGE_VERTICES: Tuple[Tuple[int, int], ...] = (
+    (0, 1),
+    (1, 2),
+    (2, 3),
+    (3, 0),
+)
+
+@dataclass(frozen=True)
+class CollisionClassification:
+    """Simple collision classification result."""
+
+    contact_type: str  # "edge-edge", "vertex-edge", "vertex-vertex"
+    collision_type: str  # "rear-end", "side-swipe", "head-on"
+    ego_feature: str  # "front edge", "rear-right corner", etc.
+    npc_feature: str
+    ego_vertices: Tuple[int, ...]  # Vertex indices
+    npc_vertices: Tuple[int, ...]
+    ego_edges: Tuple[int, ...]  # Edge indices
+    npc_edges: Tuple[int, ...]
+
+
+def classify_collision(
+    ego_polygon: np.ndarray,
+    npc_polygon: np.ndarray,
+    mtv: np.ndarray,
+) -> CollisionClassification:
+    """
+    Classify collision using the Minimum Translation Vector (MTV) from the SAT check.
+    """
+    # Get vertices
+    ego_verts = _get_vertices(ego_polygon)
+    npc_verts = _get_vertices(npc_polygon)
+
+    # The MTV gives us the collision axis and overlap depth
+    overlap = np.linalg.norm(mtv)
+    if overlap < 1e-10:
+        # Should not happen if intersecting is True, but safety check
+        axis = np.array([1.0, 0.0])
+    else:
+        axis = mtv / overlap
+
+    # Project vertices onto this axis to find extremal ones
+    ego_proj = ego_verts @ axis
+    npc_proj = npc_verts @ axis
+    
+    # Find extremal vertices on the collision axis
+    ego_vertices, npc_vertices = _find_extremal_vertices(ego_proj, npc_proj)
+
+    # Find which edges (if any) are formed by these vertices
+    ego_edges = _find_edges(ego_vertices)
+    npc_edges = _find_edges(npc_vertices)
+
+    # Classify based on vertex/edge geometry
+    contact_type, collision_type, ego_feature, npc_feature = _classify(
+        ego_vertices, npc_vertices, ego_edges, npc_edges
+    )
+
+    return CollisionClassification(
+        contact_type=contact_type,
+        collision_type=collision_type,
+        ego_feature=ego_feature,
+        npc_feature=npc_feature,
+        ego_vertices=tuple(ego_vertices),
+        npc_vertices=tuple(npc_vertices),
+        ego_edges=tuple(ego_edges),
+        npc_edges=tuple(npc_edges),
+    )
+
+
+def _get_vertices(polygon: np.ndarray) -> np.ndarray:
+    """Extract 4 unique vertices."""
+    verts = np.asarray(polygon, dtype=float)
+    if verts.shape[0] > 4 and np.allclose(verts[0], verts[-1]):
+        verts = verts[:-1]
+    if verts.shape[0] != 4:
+        raise ValueError(f"Expected 4 vertices, got {verts.shape[0]}")
+    return verts
+
+
+def _find_extremal_vertices(
+    ego_proj: np.ndarray,
+    npc_proj: np.ndarray,
+) -> Tuple[List[int], List[int]]:
+    """
+    Find extremal vertices on projection axis.
+    """
+    ego_min, ego_max = float(ego_proj.min()), float(ego_proj.max())
+    npc_min, npc_max = float(npc_proj.min()), float(npc_proj.max())
+
+    if ego_min < npc_min:
+        # EGO's max side touches NPC's min side
+        ego_target = ego_max
+        npc_target = npc_min
+    else:
+        # EGO's min side touches NPC's max side
+        ego_target = ego_min
+        npc_target = npc_max
+
+    # Find vertices at extremal positions (tight tolerance for zero penetration)
+    ego_vertices = _vertices_at_value(ego_proj, ego_target, tolerance=0.001)
+    npc_vertices = _vertices_at_value(npc_proj, npc_target, tolerance=0.001)
+
+    return ego_vertices, npc_vertices
+
+
+def _vertices_at_value(projections: np.ndarray, target: float, tolerance: float) -> List[int]:
+    """Return vertex indices whose projection is at the target value."""
+    distances = np.abs(projections - target)
+    min_dist = float(distances.min())
+    return [int(i) for i, d in enumerate(distances) if d <= min_dist + tolerance]
+
+
+def _find_edges(vertex_ids: List[int]) -> List[int]:
+    """Find which edges are formed by the given vertices."""
+    if len(vertex_ids) < 2:
+        return []
+    v_set = set(vertex_ids)
+    return [
+        edge_id
+        for edge_id, (v1, v2) in enumerate(EDGE_VERTICES)
+        if v1 in v_set and v2 in v_set
+    ]
+
+
+def _classify(
+    ego_v: List[int],
+    npc_v: List[int],
+    ego_e: List[int],
+    npc_e: List[int],
+) -> Tuple[str, str, str, str]:
+    """Classify collision from vertex/edge indices."""
+    # Edge-edge: both vehicles have an edge at contact
+    if ego_e and npc_e:
+        e_edge, n_edge = ego_e[0], npc_e[0]
+        if e_edge == 2 and n_edge == 0:
+            coll_type = "rear-end"
+        elif e_edge == 0 and n_edge == 2:
+            coll_type = "rear-ended"
+        elif e_edge == 2 and n_edge == 2:
+            coll_type = "head-on"
+        else:
+            coll_type = "side-swipe"
+        return "edge-edge", coll_type, EDGE_NAMES[e_edge], EDGE_NAMES[n_edge]
+
+    # Vertex-edge: NPC vertex hits EGO edge
+    if ego_e and npc_v:
+        e_edge = ego_e[0]
+        n_vertex = npc_v[0]
+        if e_edge == 2:
+            coll_type = "rear-end"
+        elif e_edge == 0:
+            coll_type = "rear-ended"
+        else:
+            coll_type = "side-swipe"
+        return "vertex-edge", coll_type, EDGE_NAMES[e_edge], VERTEX_NAMES[n_vertex]
+
+    # Vertex-edge: EGO vertex hits NPC edge
+    if npc_e and ego_v:
+        n_edge = npc_e[0]
+        e_vertex = ego_v[0]
+        if n_edge == 0:
+            coll_type = "rear-end"
+        elif n_edge == 2:
+            coll_type = "rear-ended"
+        else:
+            coll_type = "side-swipe"
+        return "vertex-edge", coll_type, VERTEX_NAMES[e_vertex], EDGE_NAMES[n_edge]
+
+    # Vertex-vertex: single vertices touching
+    if ego_v and npc_v:
+        e_v, n_v = ego_v[0], npc_v[0]
+        e_front = e_v in (2, 3)
+        n_front = n_v in (2, 3)
+        e_left = e_v in (0, 3)
+        n_left = n_v in (0, 3)
+        if e_left != n_left:
+            coll_type = "side-swipe"
+        elif e_front and not n_front:
+            coll_type = "rear-end"
+        elif not e_front and n_front:
+            coll_type = "rear-ended"
+        elif e_front and n_front:
+            coll_type = "head-on"
+        else:
+            coll_type = "angled"
+        return "vertex-vertex", coll_type, VERTEX_NAMES[e_v], VERTEX_NAMES[n_v]
+
+    # Fallback
+    return "complex", "angled", f"{len(ego_v)} verts", f"{len(npc_v)} verts"
