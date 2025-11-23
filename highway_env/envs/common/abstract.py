@@ -73,7 +73,7 @@ class AbstractEnv(gym.Env):
 
         self.episode_num = 0
         self.last_ep_crash = False
-
+        self.num_retries = 0
         self.reset()
 
     @property

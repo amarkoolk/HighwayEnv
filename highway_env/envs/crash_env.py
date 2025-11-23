@@ -71,6 +71,8 @@ class CrashEnv(AbstractEnv):
         self.config["lanes_count"] = self.np_random.choice(range(2, 5))
         self.config["vehicles_count"] = self.np_random.choice(range(1, 5))
         self.config["mobil_politeness"] = self.np_random.uniform(0.0, 1.0)
+        self.scenario_seed = self.np_random.integers(0, 2**32 - 1)
+        
 
         if(self.config["sample_reward_signal"]):
             self.config["reward_speed_lower"] = self.np_random.uniform(15, 25)
@@ -78,6 +80,8 @@ class CrashEnv(AbstractEnv):
             self.config["reward_speed_range"] = [self.config["reward_speed_lower"], self.config["reward_speed_upper"]]
 
         print(f"Resampling with lanes_count={self.config['lanes_count']}, vehicles_count={self.config['vehicles_count']}, mobil_politeness={self.config['mobil_politeness']} reward_speed_range={self.config['reward_speed_range']}")
+        if(self.config["only_resample_on_failure"]):
+            print(f"Number of retries: {self.num_retries}")
 
     def _reset(self) -> None:
         self.dx = 0
@@ -89,10 +93,14 @@ class CrashEnv(AbstractEnv):
         self.last_ep_crash = False
         if hasattr(self, 'vehicle') and self.vehicle is not None:
             self.last_ep_crash = self.vehicle.crashed
+
+        print(f"Last Episode Crashed: {self.last_ep_crash}")
         if self.config['multi_car']:
             if self.config["only_resample_on_failure"]:
-                if self.last_ep_crash:
+                if not self.last_ep_crash:
                     self.trial_sample()
+                else:
+                    self.num_retries += 1
             elif self.episode_num % self.config["trial_episodes"] == 0:
                 self.trial_sample()
         self._create_road()
@@ -282,14 +290,17 @@ class CrashEnv(AbstractEnv):
             self.create_vehicle(other_vehicles_type, lane2, spawn_distance2, 0)
 
     def multi_car_spawn(self):
+
+        seed = getattr(self, "scenario_seed", 42)
+        rng = np.random.RandomState(seed)
         # First Check Lane Count
         num_lanes = self.config['lanes_count']
         if num_lanes < 2:
             raise ValueError("At least 2 lanes are required for multi-car spawn.")
 
         if self.config["use_spawn_distribution"]:
-            ego_dist = self.np_random.normal(100.0, 10.0)
-            starting_vel_offset = self.np_random.normal(self.config["mean_delta_v"], 5)
+            ego_dist = rng.normal(100.0, 10.0)
+            starting_vel_offset = rng.normal(self.config["mean_delta_v"], 5)
         else:
             ego_dist = 100.0
             starting_vel_offset = self.config["mean_delta_v"]
@@ -297,14 +308,18 @@ class CrashEnv(AbstractEnv):
         self.controlled_vehicles = []
         for _ in range(self.config["controlled_vehicles"]):
             # Choose Random Lane for Ego Spawn
-            ego_lane_idx = self.np_random.choice(range(self.config['lanes_count']))
+            ego_lane_idx = rng.choice(range(self.config['lanes_count']))
             ego_lane = self.road.network.get_lane(('0', '1', ego_lane_idx))
             self.create_vehicle(self.action_type.vehicle_class, ego_lane, ego_dist, starting_vel_offset)
+            print(f"Spawning X: {ego_dist}")
 
         occupancy_grid = np.zeros((self.config["lanes_count"], 3))
         starting_dist = np.zeros((self.config["lanes_count"], 3))
+        velocity_grid = np.zeros((self.config["lanes_count"], 3)) # New: Track absolute speeds
         occupancy_grid[ego_lane_idx, 1] = 1  # Mark ego vehicle's lane as occupied
         starting_dist[ego_lane_idx, 1] = 100.0
+        velocity_grid[ego_lane_idx, 1] = self.config["initial_speed"] + starting_vel_offset
+        
         self.spawn_config = ego_lane_idx
         
         other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
@@ -312,19 +327,60 @@ class CrashEnv(AbstractEnv):
 
             # Find Spot in Occupancy Grid - rows where sum is < 3
             free_lanes = np.where(np.sum(occupancy_grid, axis=1) < 3)
-            lane_choice = self.np_random.choice(free_lanes[0]) if free_lanes[0].size > 0 else None
+            lane_choice = rng.choice(free_lanes[0]) if free_lanes[0].size > 0 else None
 
             # Pick Empty Column
             empty_columns = np.where(occupancy_grid[lane_choice] == 0)[0]
-            column_choice = self.np_random.choice(empty_columns) if empty_columns.size > 0 else None
+            column_choice = rng.choice(empty_columns) if empty_columns.size > 0 else None
 
             occupancy_grid[lane_choice, column_choice] = 1
             
             # Calculate Starting Distance - Offset from row in front by 20 m
             if self.config["use_spawn_distribution"]:
-                spawn_distance = self.np_random.normal(self.config["mean_distance"], self.config["mean_distance"] / 10)
-                starting_vel_offset = self.np_random.normal(self.config["mean_delta_v"], 5)
-            starting_dist[lane_choice, column_choice] = 100.0 + spawn_distance * (column_choice - 1)
+                spawn_distance = rng.normal(self.config["mean_distance"], self.config["mean_distance"] / 10)
+                starting_vel_offset = rng.normal(self.config["mean_delta_v"], 5)
+            else:
+                spawn_distance = self.config["mean_distance"]
+                starting_vel_offset = self.config["mean_delta_v"]
+
+            
+            # 100.0 is the center reference. Col 0 is behind, Col 2 is ahead.
+            pos = 100.0 + spawn_distance * (column_choice - 1)
+            abs_speed = self.config["initial_speed"] + starting_vel_offset
+
+            # --- TTC Safety Check ---
+            ttc_threshold = 1.0
+            # Look at neighbors in the same lane (Columns 0, 1, 2)
+            for col_idx in [0, 1, 2]:
+                if col_idx == column_choice: continue
+                
+                if occupancy_grid[lane_choice, col_idx] == 1:
+                    neighbor_pos = starting_dist[lane_choice, col_idx]
+                    neighbor_vel = velocity_grid[lane_choice, col_idx]
+                    dx = neighbor_pos - pos # Positive if neighbor is ahead
+
+                    # If neighbor is ahead (dx > 0): Don't hit them (Cap Speed)
+                    if dx > 0:
+                        max_safe_speed = neighbor_vel + (dx / ttc_threshold)
+                        if abs_speed > max_safe_speed:
+                            abs_speed = max_safe_speed - 0.5 # Small buffer
+
+                    # If neighbor is behind (dx < 0): Don't let them hit us (Floor Speed)
+                    elif dx < 0:
+                        min_safe_speed = neighbor_vel - (abs(dx) / ttc_threshold)
+                        if abs_speed < min_safe_speed:
+                            abs_speed = min_safe_speed + 0.5 # Small buffer
+
+            # Update offset based on safe absolute speed
+            starting_vel_offset = abs_speed - self.config["initial_speed"]
+
+            # Commit to grid
+            occupancy_grid[lane_choice, column_choice] = 1
+            starting_dist[lane_choice, column_choice] = pos
+            velocity_grid[lane_choice, column_choice] = abs_speed
+
+            
+            print(f"Spawning X: {100.0 + spawn_distance * (column_choice - 1)}")
 
             lane = self.road.network.get_lane(('0', '1', lane_choice))
             self.create_vehicle(other_vehicles_type, lane, starting_dist[lane_choice, column_choice], starting_vel_offset, randomize=True)
