@@ -496,7 +496,8 @@ class CrashEnv(AbstractEnv):
             'dx': self.dx,
             'dy': self.dy,
             'dvx': self.dvx,
-            'dvy': self.dvy
+            'dvy': self.dvy,
+            'num_retries': self.num_retries,
             # "vehicle_states": self.get_vehicle_states()
         }
         try:
