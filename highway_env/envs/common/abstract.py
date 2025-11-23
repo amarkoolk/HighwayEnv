@@ -72,6 +72,7 @@ class AbstractEnv(gym.Env):
         self.enable_auto_render = False
 
         self.episode_num = 0
+        self.last_ep_crash = False
 
         self.reset()
 

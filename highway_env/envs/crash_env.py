@@ -63,6 +63,7 @@ class CrashEnv(AbstractEnv):
             "sample_reward_signal": False,
             "reward_speed_lower": 20,
             "reward_speed_upper": 30,
+            "only_resample_on_failure": False
         })
         return config
     
@@ -85,8 +86,14 @@ class CrashEnv(AbstractEnv):
         self.dvy = 0
         self.ttc_x = 0
         self.ttc_y = 0
+        self.last_ep_crash = False
+        if hasattr(self, 'vehicle') and self.vehicle is not None:
+            self.last_ep_crash = self.vehicle.crashed
         if self.config['multi_car']:
-            if self.episode_num % self.config["trial_episodes"] == 0:
+            if self.config["only_resample_on_failure"]:
+                if self.last_ep_crash:
+                    self.trial_sample()
+            elif self.episode_num % self.config["trial_episodes"] == 0:
                 self.trial_sample()
         self._create_road()
         if self.config["scenarios"]:
