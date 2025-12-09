@@ -110,6 +110,18 @@ class RoadObject(ABC):
                 else:
                     self.impact = transition / 2
                     other.impact = -transition / 2
+
+                # Classify the impending collision
+                # Only set if not already classified (to preserve first collision info)
+                if self.collision_classification is None:
+                    self.collision_classification = classify_collision(
+                        self.polygon(), other.polygon(), transition
+                    )
+                    # Also set for other vehicle (with negated MTV)
+                    other.collision_classification = classify_collision(
+                        other.polygon(), self.polygon(), -transition
+                    )
+
         if intersecting:
             if self.solid and other.solid:
                 self.crashed = True
@@ -118,15 +130,17 @@ class RoadObject(ABC):
                 self.hit = True
             if not other.solid:
                 other.hit = True
-            
+
             # Classify collision using the already computed MTV (transition)
-            self.collision_classification = classify_collision(
-                self.polygon(), other.polygon(), transition
-            )
-            # Also set for other vehicle (with negated MTV)
-            other.collision_classification = classify_collision(
-                other.polygon(), self.polygon(), -transition
-            )
+            # Only set if not already classified (to preserve first collision info)
+            if self.collision_classification is None:
+                self.collision_classification = classify_collision(
+                    self.polygon(), other.polygon(), transition
+                )
+                # Also set for other vehicle (with negated MTV)
+                other.collision_classification = classify_collision(
+                    other.polygon(), self.polygon(), -transition
+                )
 
     def _is_colliding(self, other, dt):
         # Fast spherical pre-check
@@ -246,7 +260,6 @@ class Landmark(RoadObject):
 from dataclasses import dataclass
 from typing import Optional, List
 
-# Vertex indices (CCW from rear-right)
 VERTEX_NAMES = {
     0: "rear-left corner",   
     1: "rear-right corner", 
