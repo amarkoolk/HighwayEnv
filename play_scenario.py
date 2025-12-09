@@ -77,9 +77,6 @@ def play():
                 print(f"Ego Feature: {vehicle.collision_classification.ego_feature}")
                 print(f"NPC Feature: {vehicle.collision_classification.npc_feature}")
                 
-                # Optional: Pause on crash to see output
-                # import time
-                # time.sleep(1)
                 
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
