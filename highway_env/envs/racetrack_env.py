@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import functools
 
 from highway_env import utils
 from highway_env.envs.common.abstract import AbstractEnv
@@ -373,7 +374,12 @@ class RacetrackEnv(AbstractEnv):
                 if i == 0
                 else self.road.network.random_lane_index(rng)
             )
-            controlled_vehicle = self.action_type.vehicle_class.make_on_lane(
+            if isinstance(self.action_type.vehicle_class, functools.partial):
+                vehicle_class = self.action_type.vehicle_class.func
+            else:
+                vehicle_class = self.action_type.vehicle_class
+
+            controlled_vehicle = vehicle_class.make_on_lane(
                 self.road, lane_index, speed=None, longitudinal=rng.uniform(20, 50)
             )
 
